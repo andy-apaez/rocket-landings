@@ -1,0 +1,1110 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rocket Landing Viewer</title>
+<link rel="stylesheet" href="mission.css">
+<style>
+  :root {
+    --bg: #0b0f17; --panel: rgba(16, 22, 34, 0.88); --line: #263042; --text: #dfe6f2; --muted: #8a97ab;
+    --accent: #ffb547; --ok: #3fd18b; --bad: #ff5d5d; --warn: #f4c542; --soft: #6aa8ff;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
+    font: 13px/1.4 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; overflow: hidden; }
+  #scene { position: fixed; inset: 0; }
+  .panel { position: fixed; background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+    backdrop-filter: blur(8px); }
+  #side { top: 12px; left: 12px; width: 300px; max-height: calc(100% - 100px); overflow: auto; padding: 14px; }
+  #side h1 { font-size: 15px; margin: 0 0 2px; }
+  #side .sub { color: var(--muted); font-size: 12px; margin-bottom: 12px; }
+  h2 { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 16px 0 6px; }
+  select, button, input[type=file]::file-selector-button {
+    background: #1b2433; color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px;
+    font: inherit; cursor: pointer; }
+  select { width: 100%; }
+  button:hover, select:hover { border-color: #3a475e; }
+  label.chk { display: flex; gap: 6px; align-items: center; color: var(--muted); margin-top: 6px; cursor: pointer; }
+  #curve { width: 100%; height: 110px; display: block; }
+  #curve .pt { cursor: pointer; }
+  #rockets { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
+  .rk { border: 1px solid var(--line); border-radius: 6px; padding: 4px 2px; text-align: center; cursor: pointer;
+    font-size: 11px; background: #141b27; }
+  .rk.sel { outline: 2px solid var(--accent); }
+  .rk .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 3px; }
+  .legend { display: flex; flex-wrap: wrap; gap: 10px; color: var(--muted); font-size: 11px; margin-top: 8px; }
+  .legend span::before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+    margin-right: 4px; background: var(--c); }
+  #hud { top: 12px; right: 12px; width: 230px; padding: 12px 14px; }
+  #hud .title { font-weight: 600; margin-bottom: 6px; }
+  #hud .row { display: flex; justify-content: space-between; padding: 2px 0; font-variant-numeric: tabular-nums; }
+  #hud .row span:first-child { color: var(--muted); }
+  .bar { height: 5px; background: #222c3c; border-radius: 3px; overflow: hidden; margin: 2px 0 6px; }
+  .bar i { display: block; height: 100%; background: var(--accent); }
+  #bottom { left: 50%; transform: translateX(-50%); bottom: 12px; width: min(760px, calc(100% - 24px));
+    padding: 10px 14px; display: flex; gap: 10px; align-items: center; }
+  #timeline { flex: 1; accent-color: var(--accent); }
+  #time { font-variant-numeric: tabular-nums; color: var(--muted); min-width: 92px; text-align: right; }
+  #empty { position: fixed; inset: 0; display: none; place-items: center; z-index: 5; }
+  #empty .box { max-width: 520px; padding: 22px 26px; }
+  code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+  pre { background: #0f1520; border: 1px solid var(--line); border-radius: 6px; padding: 10px; overflow: auto; }
+  .muted { color: var(--muted); }
+  .seg { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 4px; margin-bottom: 6px; }
+  .seg button { padding: 5px 4px; font-size: 12px; }
+  .seg button.on { border-color: var(--accent); color: var(--accent); background: #2a2416; }
+  #sliders { display: grid; grid-template-columns: 1fr 1fr; gap: 0 14px; }
+  .sl { margin: 4px 0; min-width: 0; }
+  .sl .lab { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); }
+  .sl .lab b { color: var(--text); font-weight: 500; font-variant-numeric: tabular-nums; }
+  .sl input { width: 100%; accent-color: var(--accent); margin: 2px 0 0; }
+  .fieldrow { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin: 8px 0 4px;
+    font-size: 12px; color: var(--muted); }
+  .fieldrow select { width: auto; }
+  .btnrow { display: flex; gap: 6px; margin-top: 10px; }
+  button.primary { flex: 1; background: var(--accent); color: #1b1407; border-color: var(--accent); font-weight: 700;
+    padding: 8px; font-size: 14px; }
+  button.primary:disabled { opacity: .55; cursor: progress; }
+  button.link { background: none; border: none; color: var(--muted); padding: 0; margin-top: 8px; font-size: 11px;
+    text-decoration: underline; }
+  #lstatus { margin-top: 8px; font-size: 12px; min-height: 17px; }
+  #lstatus.err { color: var(--bad); }
+  @media (max-width: 760px) {
+    #side { width: calc(100% - 24px); max-height: 38%; }
+    #hud { display: none; }
+  }
+</style>
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+} }
+</script>
+</head>
+<body>
+<div id="scene"></div>
+
+<div id="side" class="panel">
+  <h1>Rocket landings</h1>
+  <div class="sub" id="subtitle">No replay loaded</div>
+
+  <section id="launchPanel" hidden>
+    <h2>Launch control</h2>
+    <div class="seg" id="taskSel">
+      <button data-v="land" class="on" title="Touch down on the pad with the legs">Land on legs</button>
+      <button data-v="catch" title="Hover between the tower arms, no legs, without hitting the tower">Tower catch</button>
+    </div>
+    <div class="seg" id="pilot">
+      <button data-v="ppo" class="on" title="PPO policy; trains before each launch">Neural net</button>
+      <button data-v="pd" title="Scripted guidance controller; no training">Autopilot</button>
+    </div>
+    <div class="seg" id="bodySel"></div>
+    <div id="sliders"></div>
+    <div class="fieldrow"><span>Training before launch</span><select id="trainSteps"></select></div>
+    <div class="btnrow"><button id="launch" class="primary">Launch</button><button id="randomize" title="Random conditions">Randomize</button></div>
+    <label class="chk"><input type="checkbox" id="auto"> Keep launching after each flight</label>
+    <label class="chk"><input type="checkbox" id="autoRandom" checked> Randomize conditions each launch</label>
+    <div id="lstatus" class="muted"></div>
+    <div class="bar" id="lbar" hidden><i></i></div>
+    <button id="resetModel" class="link">Reset model and history…</button>
+    <button id="openMission" class="link" hidden>Open orbital mission control…</button>
+  </section>
+
+  <h2 id="replayHead">Replay</h2>
+  <select id="source"></select>
+  <label class="chk" id="liveRow"><input type="checkbox" id="live" checked> Jump to newest training snapshot</label>
+  <div style="margin-top:8px"><input type="file" id="file" accept=".json"></div>
+
+  <h2 id="curveHead">Training progress</h2>
+  <svg id="curve" viewBox="0 0 272 110" preserveAspectRatio="none"></svg>
+  <div class="legend" id="curveLegend"><span style="--c:var(--ok)">landed %</span><span style="--c:var(--soft)">mean return</span></div>
+
+  <h2>Rockets <span class="muted" id="tally"></span></h2>
+  <div id="rockets"></div>
+  <div class="legend">
+    <span style="--c:var(--ok)">landed / caught</span><span style="--c:var(--bad)">crashed</span>
+    <span style="--c:var(--warn)">soft, off-target</span><span style="--c:#9aa6b8">timeout / flying</span>
+  </div>
+  <label class="chk"><input type="checkbox" id="follow" checked> Camera follows selected rocket</label>
+  <label class="chk"><input type="checkbox" id="trails" checked> Trails</label>
+  <label class="chk"><input type="checkbox" id="ghost" checked> Fade unselected rockets</label>
+  <label class="chk"><input type="checkbox" id="big"> Enlarge rockets ×3</label>
+</div>
+
+<div id="hud" class="panel"></div>
+
+<div id="bottom" class="panel">
+  <button id="play">❚❚</button>
+  <button id="restart" title="Restart">↺</button>
+  <input type="range" id="timeline" min="0" max="1000" value="0">
+  <span id="time">0.0 s</span>
+  <select id="speed" style="width:auto">
+    <option value="0.5">0.5×</option><option value="1">1×</option><option value="2" selected>2×</option>
+    <option value="4">4×</option><option value="8">8×</option>
+  </select>
+</div>
+
+<div id="empty"><div class="panel box">
+  <h1 style="font-size:16px;margin:0 0 8px">No replays found</h1>
+  <p class="muted">The viewer reads <code>runs/replays/manifest.json</code>. From the project root:</p>
+  <pre>python -m rocket_sim.replay --pd          # scripted controller
+python train.py train                     # writes a replay every 250k steps
+python -m http.server 8000                # then open localhost:8000/viewer/</pre>
+  <p class="muted">Or open a replay <code>.json</code> with the file picker on the left.</p>
+</div></div>
+
+<script type="module">
+import * as THREE from "three";
+import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
+
+const params = new URLSearchParams(location.search);
+let DIR = (params.get("dir") || "../runs/replays").replace(/\/$/, "");
+let serverMode = false;   // true when served by play.py (launch control enabled)
+const OUTCOME_COLOR = { landed: 0x3fd18b, caught: 0x3fd18b, timeout: 0x9aa6b8, running: 0x9aa6b8,
+  off_pad: 0xf4c542, steep_slope: 0xf4c542, uneven_legs: 0xf4c542 };
+const colorFor = o => OUTCOME_COLOR[o] ?? 0xff5d5d;
+const BODY_STYLE = {
+  earth: { sky: 0x8fb7e0, fog: 0xa9c6e4, low: [0.30, 0.42, 0.22], high: [0.55, 0.50, 0.38], dust: 0xc9c2b4 },
+  mars:  { sky: 0xd9a37a, fog: 0xd8a781, low: [0.55, 0.27, 0.15], high: [0.78, 0.48, 0.30], dust: 0xb87a55 },
+  moon:  { sky: 0x05070c, fog: 0x05070c, low: [0.35, 0.35, 0.37], high: [0.70, 0.70, 0.72], dust: 0xa3a3a6 },
+};
+// frame layout written by rocket_sim/replay.py
+const F = { x: 0, y: 1, z: 2, qw: 3, qx: 4, qy: 5, qz: 6, thr: 7, gx: 8, gz: 9, fuel: 10, com: 11 };
+
+// ---------------------------------------------------------------- scene
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+document.getElementById("scene").appendChild(renderer.domElement);
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(50, 1, 0.5, 5000);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.maxPolarAngle = Math.PI * 0.495;
+scene.add(new THREE.HemisphereLight(0xdde8ff, 0x3a3020, 0.7));
+const sun = new THREE.DirectionalLight(0xffffff, 1.6);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+Object.assign(sun.shadow.camera, { left: -250, right: 250, top: 250, bottom: -250, near: 1, far: 1200 });
+scene.add(sun, sun.target);
+function resize() {
+  renderer.setSize(innerWidth, innerHeight);
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+}
+addEventListener("resize", resize); resize();
+
+let world = null;      // { group, replay, rockets: [...], duration, ground(x,z) }
+let t = 0, playing = true, selected = +(params.get("rocket") || 1) - 1;
+let startAt = +(params.get("t") || 0);   // ?t=30 starts the first replay 30 s in
+
+// ---------------------------------------------------------------- builders
+function buildTerrain(tr, style) {
+  const g = tr.grid, S = tr.size, c = S / (g - 1), H = tr.heights;
+  const pos = new Float32Array(g * g * 3), col = new Float32Array(g * g * 3);
+  let lo = Infinity, hi = -Infinity;
+  for (const row of H) for (const h of row) { lo = Math.min(lo, h); hi = Math.max(hi, h); }
+  for (let i = 0; i < g; i++) for (let j = 0; j < g; j++) {
+    const k = (i * g + j) * 3, h = H[i][j], s = (h - lo) / Math.max(hi - lo, 1e-6);
+    pos.set([-S / 2 + i * c, h, -S / 2 + j * c], k);
+    const n = 0.06 * Math.sin(i * 12.9898 + j * 78.233) ** 2;  // a little speckle
+    for (let ch = 0; ch < 3; ch++) col[k + ch] = style.low[ch] + (style.high[ch] - style.low[ch]) * s + n;
+  }
+  const idx = [];
+  for (let i = 0; i < g - 1; i++) for (let j = 0; j < g - 1; j++) {
+    const a = i * g + j, b = a + 1, cc = a + g, d = cc + 1;
+    idx.push(a, b, cc, b, d, cc);
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+  geo.setAttribute("color", new THREE.BufferAttribute(col, 3));
+  geo.setIndex(idx);
+  geo.computeVertexNormals();
+  const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, flatShading: true }));
+  mesh.receiveShadow = true;
+  const ground = (x, z) => {
+    let u = Math.min(Math.max((x + S / 2) / c, 0), g - 1.0001), v = Math.min(Math.max((z + S / 2) / c, 0), g - 1.0001);
+    const i = Math.floor(u), j = Math.floor(v), fu = u - i, fv = v - j;
+    return H[i][j] * (1 - fu) * (1 - fv) + H[i + 1][j] * fu * (1 - fv) + H[i][j + 1] * (1 - fu) * fv + H[i + 1][j + 1] * fu * fv;
+  };
+  return { mesh, ground };
+}
+
+// ---------------------------------------------------------------- shared textures
+function canvasTex(w, h, draw, srgb = true) {
+  const cv = document.createElement("canvas"); cv.width = w; cv.height = h;
+  draw(cv.getContext("2d"), w, h);
+  const tex = new THREE.CanvasTexture(cv);
+  if (srgb) tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 4;
+  return tex;
+}
+let rand = 1;
+const rnd = () => (rand = (rand * 16807) % 2147483647) / 2147483647;   // deterministic, so textures don't shimmer between loads
+
+// Booster tank skin: white with panel seams and soot that thickens toward the engines (canvas top = rocket top).
+const tankTex = canvasTex(256, 1024, (x, w, h) => {
+  rand = 7;
+  x.fillStyle = "#ecebe7"; x.fillRect(0, 0, w, h);
+  x.fillStyle = "rgba(0,0,0,0.10)";
+  for (const f of [0.18, 0.37, 0.55, 0.72, 0.88]) x.fillRect(0, f * h, w, 2);         // ring welds
+  const g = x.createLinearGradient(0, h * 0.25, 0, h);
+  g.addColorStop(0, "rgba(60,52,44,0)"); g.addColorStop(0.55, "rgba(60,52,44,0.35)"); g.addColorStop(1, "rgba(35,30,26,0.85)");
+  x.fillStyle = g; x.fillRect(0, 0, w, h);
+  for (let i = 0; i < 140; i++) {                                                      // streaks
+    const sx = rnd() * w, top = h * (0.3 + 0.5 * rnd()), a = 0.05 + 0.18 * rnd();
+    const sg = x.createLinearGradient(0, top, 0, h);
+    sg.addColorStop(0, "rgba(30,26,22,0)"); sg.addColorStop(1, `rgba(30,26,22,${a})`);
+    x.fillStyle = sg; x.fillRect(sx, top, 1 + 4 * rnd(), h - top);
+  }
+});
+// Grid-fin lattice: alpha-tested so you can see through the cells.
+const latticeTex = canvasTex(128, 128, (x, w, h) => {
+  x.clearRect(0, 0, w, h); x.strokeStyle = "#fff"; x.lineWidth = 5;
+  for (let i = -w; i < 2 * w; i += 18) {
+    x.beginPath(); x.moveTo(i, 0); x.lineTo(i + h, h); x.stroke();
+    x.beginPath(); x.moveTo(i + h, 0); x.lineTo(i, h); x.stroke();
+  }
+  x.lineWidth = 10; x.strokeRect(0, 0, w, h);
+}, false);
+// Landing zone concrete: slabs, expansion joints, central scorch, painted target ring and crosshair.
+function padTexture(apronR, targetR) {
+  return canvasTex(1024, 1024, (x, w, h) => {
+    rand = 3;
+    const c = w / 2, px = w / (2 * apronR);   // pixels per meter
+    x.fillStyle = "#a9a7a1"; x.fillRect(0, 0, w, h);
+    for (let i = 0; i < 9000; i++) {
+      const v = 140 + rnd() * 50 | 0;
+      x.fillStyle = `rgba(${v},${v - 2},${v - 6},0.25)`; x.fillRect(rnd() * w, rnd() * h, 2, 2);
+    }
+    x.strokeStyle = "rgba(60,58,54,0.45)"; x.lineWidth = 2;                       // 4 m slabs
+    for (let m = -apronR; m <= apronR; m += 4) {
+      x.beginPath(); x.moveTo(c + m * px, 0); x.lineTo(c + m * px, h); x.stroke();
+      x.beginPath(); x.moveTo(0, c + m * px); x.lineTo(w, c + m * px); x.stroke();
+    }
+    const sc = x.createRadialGradient(c, c, 0, c, c, targetR * 2.4 * px);          // engine scorch
+    sc.addColorStop(0, "rgba(25,22,20,0.85)"); sc.addColorStop(0.5, "rgba(40,36,32,0.45)"); sc.addColorStop(1, "rgba(40,36,32,0)");
+    x.fillStyle = sc; x.fillRect(0, 0, w, h);
+    x.strokeStyle = "#f4f4f2"; x.lineWidth = 0.55 * px;                             // target ring = scoring radius
+    x.beginPath(); x.arc(c, c, targetR * px, 0, 7); x.stroke();
+    x.lineWidth = 0.35 * px;
+    x.beginPath(); x.arc(c, c, targetR * 1.9 * px, 0, 7); x.stroke();
+    x.lineWidth = 0.7 * px;                                                         // crosshair with open center
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      x.beginPath(); x.moveTo(c + dx * 1.2 * px, c + dy * 1.2 * px);
+      x.lineTo(c + dx * targetR * 1.6 * px, c + dy * targetR * 1.6 * px); x.stroke();
+    }
+    x.strokeStyle = "#e3b23c"; x.lineWidth = 0.45 * px;                             // apron edge stripe
+    x.beginPath(); x.arc(c, c, (apronR - 0.6) * px, 0, 7); x.stroke();
+  });
+}
+
+const MAT = {
+  white: new THREE.MeshStandardMaterial({ map: tankTex, roughness: 0.5, metalness: 0.15 }),
+  black: new THREE.MeshStandardMaterial({ color: 0x1b1c1f, roughness: 0.55, metalness: 0.3 }),
+  carbon: new THREE.MeshStandardMaterial({ color: 0x15161a, roughness: 0.4, metalness: 0.4 }),
+  metal: new THREE.MeshStandardMaterial({ color: 0x6b6f75, roughness: 0.35, metalness: 0.9 }),
+  fin: new THREE.MeshStandardMaterial({ color: 0x3a3c40, map: latticeTex, alphaTest: 0.5, side: THREE.DoubleSide,
+    roughness: 0.5, metalness: 0.7 }),
+  steel: new THREE.MeshStandardMaterial({ color: 0x8d9196, roughness: 0.55, metalness: 0.75 }),
+  concrete: new THREE.MeshStandardMaterial({ color: 0x9c9a95, roughness: 0.95 }),
+  plume: new THREE.MeshBasicMaterial({ color: 0xff9a3c, transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending,
+    depthWrite: false, side: THREE.DoubleSide }),
+  core: new THREE.MeshBasicMaterial({ color: 0xfff1c8, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending,
+    depthWrite: false }),
+  diamond: new THREE.MeshBasicMaterial({ color: 0xffe2a8, transparent: true, opacity: 0.8, blending: THREE.AdditiveBlending,
+    depthWrite: false }),
+};
+const UNIT_CYL = new THREE.CylinderGeometry(1, 1, 1, 8).translate(0, 0.5, 0);   // strut, scaled per frame
+
+function beam(a, b, th) {   // box geometry from point a to point b
+  const d = new THREE.Vector3().subVectors(b, a), len = d.length();
+  const g = new THREE.BoxGeometry(th, len, th);
+  g.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), d.normalize()));
+  return g.translate((a.x + b.x) / 2, (a.y + b.y) / 2, (a.z + b.z) / 2);
+}
+const V = (x, y, z) => new THREE.Vector3(x, y, z);
+
+// ---------------------------------------------------------------- landing zone
+function buildPad(meta, ground) {
+  const p = meta.pad, apronR = meta.flat_radius ?? 12, targetR = meta.pad_radius;
+  const g = new THREE.Group();
+  const top = new THREE.MeshStandardMaterial({ map: padTexture(apronR, targetR), roughness: 0.9 });
+  const slab = new THREE.Mesh(new THREE.CylinderGeometry(apronR, apronR + 0.4, 0.5, 64), [MAT.concrete, top, MAT.concrete]);
+  slab.position.set(p[0], p[1] + 0.05, p[2]);   // top surface sits 0.3 m above the flattened ground
+  slab.receiveShadow = true;
+  g.add(slab);
+  for (let i = 0; i < 16; i++) {                // perimeter light posts
+    const a = (i / 16) * Math.PI * 2, x = p[0] + Math.cos(a) * (apronR + 1.2), z = p[2] + Math.sin(a) * (apronR + 1.2);
+    const post = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.1, 0.9, 6), MAT.steel);
+    post.position.set(x, ground(x, z) + 0.45, z);
+    const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.16, 8, 6),
+      new THREE.MeshBasicMaterial({ color: i % 2 ? 0xff4a3a : 0xfff4d6 }));
+    lamp.position.set(x, ground(x, z) + 0.95, z);
+    g.add(post, lamp);
+  }
+  return g;
+}
+
+// ---------------------------------------------------------------- catch tower
+function buildTower(meta, ground) {
+  const p = meta.pad, spec = meta.rocket, L = spec.length, r = spec.radius;
+  const apronR = meta.flat_radius ?? 12;
+  const w = meta.tower?.width ?? Math.max(3, L * 0.26);  // tower width
+  const tw = meta.tower;                                 // physics geometry (newer replays)
+  const toPad = tw ? V(-tw.direction[0], 0, -tw.direction[1]) : V(1, 0, 1).normalize();
+  const base = tw ? V(...tw.base) : V(p[0] - toPad.x * (apronR + w / 2 + 2.5), 0, p[2] - toPad.z * (apronR + w / 2 + 2.5));
+  if (!tw) base.y = ground(base.x, base.z);
+  const dist = Math.hypot(p[0] - base.x, p[2] - base.z);
+  const catchY = meta.task === "catch"
+    ? tw.catch_target[1] - base.y                                  // arms wait at the catch height
+    : p[1] + spec.leg_drop + L - 1.9 - base.y;                     // just under the interstage of a landed booster
+  const H = tw ? tw.height : Math.max(catchY + 7, L * 2.3);
+
+  const tower = new THREE.Group();
+  tower.position.copy(base);
+  tower.rotation.y = Math.atan2(-toPad.z, toPad.x);      // local +x points at the pad
+  // lattice: corner columns, rings and X-bracing on every face
+  const geos = [], h = w / 2, seg = w;
+  const corners = [[h, h], [h, -h], [-h, -h], [-h, h]];
+  for (const [x, z] of corners) geos.push(beam(V(x, 0, z), V(x, H, z), 0.42));
+  for (let y = 0; y < H - 0.01; y += seg) {
+    const y2 = Math.min(y + seg, H);
+    for (let k = 0; k < 4; k++) {
+      const [x1, z1] = corners[k], [x2, z2] = corners[(k + 1) % 4];
+      geos.push(beam(V(x1, y2, z1), V(x2, y2, z2), 0.22));
+      geos.push(beam(V(x1, y, z1), V(x2, y2, z2), 0.14), beam(V(x2, y, z2), V(x1, y2, z1), 0.14));
+    }
+  }
+  geos.push(new THREE.BoxGeometry(w + 0.6, 0.8, w + 0.6).translate(0, H + 0.4, 0));        // crown
+  geos.push(new THREE.CylinderGeometry(0.06, 0.12, 6, 6).translate(0, H + 3.8, 0));        // lightning mast
+  const lattice = new THREE.Mesh(mergeGeometries(geos), MAT.steel);
+  lattice.castShadow = true; lattice.receiveShadow = true;
+  const footing = new THREE.Mesh(new THREE.BoxGeometry(w + 3, 1.2, w + 3), MAT.concrete);
+  footing.position.y = 0.3; footing.receiveShadow = true;
+  tower.add(lattice, footing);
+
+  // carriage that rides the tower, carrying two independently pivoting arms
+  const carriage = new THREE.Group(); carriage.position.y = catchY;
+  const sleeve = new THREE.Mesh(new THREE.BoxGeometry(w + 0.9, 2.4, w + 0.9), MAT.black);
+  sleeve.castShadow = true; carriage.add(sleeve);
+  const armLen = dist - w / 2 + 4.5;
+  const armGeo = (() => {
+    const g = [], hh = 0.75, d = 0.3;
+    for (const y of [-hh, hh]) for (const z of [-d, d]) g.push(beam(V(0, y, z), V(armLen, y * 0.7, z), 0.2));
+    for (let x = 0; x <= armLen - 0.5; x += 1.4) {
+      const t = 1 - 0.3 * x / armLen;
+      g.push(beam(V(x, -hh * t, 0), V(x, hh * t, 0), 0.14));
+      g.push(beam(V(x, -hh * t, 0), V(x + 1.4, hh * (t - 0.3 * 1.4 / armLen), 0), 0.1));
+    }
+    g.push(new THREE.BoxGeometry(armLen * 0.45, 0.5, 0.25).translate(armLen * 0.72, 0.1, 0));  // catch rail
+    return mergeGeometries(g);
+  })();
+  const arms = [1, -1].map(side => {
+    const pivot = new THREE.Group();
+    pivot.position.set(h + 0.45, 0, side * (h + 0.1));
+    const arm = new THREE.Mesh(armGeo, MAT.steel); arm.castShadow = true;
+    const rail = new THREE.Mesh(new THREE.BoxGeometry(armLen * 0.4, 0.35, 0.12),
+      new THREE.MeshStandardMaterial({ color: 0xd9a400, roughness: 0.6 }));
+    rail.position.set(armLen * 0.72, 0.1, -side * 0.42);              // yellow bumper on the inner face
+    pivot.add(arm, rail);
+    carriage.add(pivot);
+    return { pivot, side };
+  });
+  tower.add(carriage);
+  tower.updateMatrixWorld(true);
+  return { group: tower, arms, carriage, catchY, armHalf: 0.45, rocketR: r };
+}
+
+// Arm yaw (three.js rotation.y) so the arm on `side` passes `clear` meters from point c (tower-local x/z).
+function armYaw(pivot, c, side, clear) {
+  const vx = c.x - pivot.position.x, vz = c.z - pivot.position.z, d = Math.hypot(vx, vz);
+  const phi = Math.atan2(vz, vx) + side * Math.asin(Math.min(clear / Math.max(d, 1e-6), 0.95));
+  return -phi;
+}
+
+// ---------------------------------------------------------------- booster
+function buildRocket(spec) {
+  const { length: L, radius: r, leg_radius: R, leg_drop: drop } = spec;
+  const root = new THREE.Group();          // at COM, rotated by the quaternion
+  const body = new THREE.Group();          // geometric center (offset by -com_y)
+  root.add(body);
+  const add = (geo, mat, parent = body) => { const m = new THREE.Mesh(geo, mat); m.castShadow = true; parent.add(m); return m; };
+  const baseY = -L / 2, octa = 0.35, inter = Math.min(1.8, L * 0.14);
+  // tank, interstage (open top), engine section
+  add(new THREE.CylinderGeometry(r, r, L - octa - inter, 32, 1, true).translate(0, baseY + octa + (L - octa - inter) / 2, 0), MAT.white);
+  add(new THREE.CylinderGeometry(r * 1.005, r * 1.005, inter, 32, 1, true).translate(0, L / 2 - inter / 2, 0), MAT.black);
+  add(new THREE.CircleGeometry(r, 32).rotateX(-Math.PI / 2).translate(0, L / 2 - inter * 0.7, 0), MAT.black);
+  add(new THREE.CylinderGeometry(r * 0.99, r * 0.96, octa, 32).translate(0, baseY + octa / 2, 0), MAT.carbon);
+  // grid fins near the top, deployed
+  for (let k = 0; k < 4; k++) {
+    const a = Math.PI / 4 + k * Math.PI / 2;
+    const fin = add(new THREE.BoxGeometry(r * 0.8, 0.1, r * 0.95).translate(r + r * 0.42, 0, 0), MAT.fin);
+    fin.rotation.y = a; fin.position.y = L / 2 - inter * 0.45;
+    const mount = add(new THREE.BoxGeometry(0.25, 0.35, 0.3).translate(r + 0.08, 0, 0), MAT.metal);
+    mount.rotation.y = a; mount.position.y = L / 2 - inter * 0.45;
+  }
+  // nine-engine cluster; only the center engine gimbals and fires (a landing burn)
+  const bellH = r * 0.42, bellR = r * 0.19;
+  const bellGeo = new THREE.CylinderGeometry(bellR * 0.4, bellR, bellH, 18, 1, true).translate(0, -bellH / 2, 0);
+  for (let k = 0; k < 8; k++) {
+    const a = k * Math.PI / 4, b = add(bellGeo, MAT.metal);
+    b.position.set(Math.cos(a) * r * 0.62, baseY, Math.sin(a) * r * 0.62);
+  }
+  const gimbal = new THREE.Group(); gimbal.position.y = baseY; body.add(gimbal);
+  const hotMat = MAT.metal.clone(); hotMat.emissive = new THREE.Color(0xff5a1a); hotMat.emissiveIntensity = 0;
+  hotMat.side = THREE.DoubleSide;
+  add(bellGeo, hotMat, gimbal);
+  // plume: expanding outer sheath, hot core, shock diamonds (atmosphere only)
+  const plume = new THREE.Group(); plume.position.y = -bellH; gimbal.add(plume);
+  const sheath = new THREE.Mesh(new THREE.CylinderGeometry(bellR, bellR * 1.8, 1, 20, 1, true).translate(0, -0.5, 0), MAT.plume);
+  const core = new THREE.Mesh(new THREE.ConeGeometry(bellR * 0.85, 1, 16, 1, true).rotateX(Math.PI).translate(0, -0.5, 0), MAT.core);
+  const diamonds = [0, 1, 2, 3].map(() => {
+    const d = new THREE.Mesh(new THREE.SphereGeometry(bellR * 0.55, 10, 8), MAT.diamond);
+    plume.add(d); return d;
+  });
+  plume.add(sheath, core);
+  for (const fx of [sheath, core, ...diamonds]) fx.userData.fx = true;   // effects keep their own materials when ghosted
+  const light = new THREE.PointLight(0xffa040, 0, 70, 1.5); light.position.y = -r * 2; gimbal.add(light);
+
+  // landing legs: hinge at the base, stowed flush along the tank, swing down to the feet used by the physics
+  const hingeY = baseY + octa, hingeR = r + 0.1;
+  const dx = R - hingeR, dy = (baseY - drop) - hingeY, legLen = Math.hypot(dx, dy), legAng = Math.atan2(dx, dy);
+  const legs = [[1, 0], [-1, 0], [0, 1], [0, -1]].map(([ux, uz]) => {
+    const az = new THREE.Group(); az.rotation.y = Math.atan2(-uz, ux); body.add(az);   // local +x = outward
+    const hinge = new THREE.Group(); hinge.position.set(hingeR, hingeY, 0); az.add(hinge);
+    add(new THREE.BoxGeometry(0.22, legLen, 0.5).translate(0, legLen / 2, 0), MAT.carbon, hinge);
+    add(new THREE.BoxGeometry(0.26, legLen * 0.25, 0.54).translate(0, legLen * 0.12, 0), MAT.black, hinge);
+    const foot = add(new THREE.CylinderGeometry(0.42, 0.48, 0.12, 14), MAT.metal, hinge);
+    foot.position.y = legLen;
+    const strut = add(UNIT_CYL, MAT.metal, az);
+    return { hinge, foot, strut, anchor: V(r * 0.98, hingeY + legLen * 0.95, 0) };
+  });
+  return { root, body, gimbal, hotMat, plume, sheath, core, diamonds, light, legs, legLen, legAng, bellR,
+    phase: Math.random() * 10 };
+}
+
+const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _up = new THREE.Vector3(0, 1, 0);
+function setLegs(m, deploy) {
+  const ang = m.legAng * deploy;
+  for (const leg of m.legs) {
+    leg.hinge.rotation.z = -ang;
+    leg.foot.rotation.z = ang;                                         // keep the foot level
+    // strut from the tank to 55% along the leg
+    _b.set(Math.sin(ang), Math.cos(ang), 0).multiplyScalar(m.legLen * 0.55).add(leg.hinge.position);
+    _a.copy(leg.anchor);
+    const d = _b.clone().sub(_a), len = d.length();
+    leg.strut.position.copy(_a);
+    leg.strut.quaternion.setFromUnitVectors(_up, d.normalize());
+    leg.strut.scale.set(0.07, len, 0.07);
+  }
+}
+
+// Unselected rockets can be drawn as translucent ghosts so a crowd converging on one pad stays readable.
+const GHOST = new Map();
+function ghostOf(mat) {
+  if (!GHOST.has(mat)) {
+    const g = mat.clone(); g.transparent = true; g.opacity = 0.12; g.depthWrite = false;
+    GHOST.set(mat, g);
+  }
+  return GHOST.get(mat);
+}
+function setGhost(model, ghost) {
+  if (model.ghost === ghost) return;
+  model.ghost = ghost;
+  model.root.traverse(o => {
+    if (!o.isMesh || o.userData.fx) return;
+    o.userData.solid ??= o.material;
+    o.material = ghost ? ghostOf(o.userData.solid) : o.userData.solid;
+    o.castShadow = !ghost;
+  });
+}
+
+function buildDust(color) {
+  const g = new THREE.Group();
+  const mat = new THREE.MeshStandardMaterial({ color, transparent: true, opacity: 0, depthWrite: false, roughness: 1 });
+  const puffs = Array.from({ length: 12 }, () => { const s = new THREE.Mesh(new THREE.SphereGeometry(1, 10, 8), mat); g.add(s); return s; });
+  g.visible = false;
+  return { g, puffs, mat };
+}
+
+function buildTrail(frames, color) {
+  const pts = new Float32Array(frames.length * 3);
+  frames.forEach((f, i) => pts.set([f[F.x], f[F.y], f[F.z]], i * 3));
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute("position", new THREE.BufferAttribute(pts, 3));
+  const line = new THREE.Line(geo, new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.75 }));
+  line.frustumCulled = false;
+  return line;
+}
+
+function buildBurst() {
+  const g = new THREE.Group();
+  const fire = new THREE.Mesh(new THREE.SphereGeometry(1, 20, 14),
+    new THREE.MeshBasicMaterial({ color: 0xff7a2a, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }));
+  const smoke = new THREE.Mesh(new THREE.SphereGeometry(1, 16, 12),
+    new THREE.MeshStandardMaterial({ color: 0x333333, transparent: true, depthWrite: false }));
+  g.add(fire, smoke); g.visible = false;
+  return { g, fire, smoke };
+}
+
+function buildRing(color) {
+  const m = new THREE.Mesh(new THREE.RingGeometry(0.8, 1, 48),
+    new THREE.MeshBasicMaterial({ color, transparent: true, side: THREE.DoubleSide, depthWrite: false }));
+  m.rotation.x = -Math.PI / 2; m.visible = false;
+  return m;
+}
+
+// ---------------------------------------------------------------- load
+function load(replay, label) {
+  if (world) { scene.remove(world.group); world.group.traverse(o => { o.geometry?.dispose?.(); }); }
+  const body = replay.meta.body?.[0] ?? "earth";
+  let style = BODY_STYLE[body] ?? BODY_STYLE.earth;
+  const site = replay.meta.site;   // landing picked on the globe: color the ground like the imagery there
+  if (site?.color) {
+    const lin = site.color.map(v => Math.pow(v, 2.2));
+    const lift = Math.max(0.28 / Math.max(...lin, 1e-3), 1);   // satellite imagery is dark; keep the hue, raise the level
+    style = { ...style, low: lin.map(v => Math.min(v * lift * 0.85, 1)), high: lin.map(v => Math.min(v * lift * 1.5 + 0.06, 1)),
+      dust: new THREE.Color(...lin.map(v => Math.min(v * lift * 1.6, 1))).getHex() };
+  }
+  scene.background = new THREE.Color(style.sky);
+  scene.fog = new THREE.Fog(style.fog, 350, 1400);
+  const group = new THREE.Group(); scene.add(group);
+  const terrain = buildTerrain(replay.terrain, style);
+  const tower = buildTower(replay.meta, terrain.ground);
+  group.add(terrain.mesh, buildPad(replay.meta, terrain.ground), tower.group);
+  // a far ground plane so the world doesn't end in a hard edge
+  const far = new THREE.Mesh(new THREE.CircleGeometry(3000, 32),
+    new THREE.MeshStandardMaterial({ color: new THREE.Color(...style.low.map((v, i) => (v + style.high[i]) / 2)), roughness: 1 }));
+  far.rotation.x = -Math.PI / 2; far.position.y = Math.min(...replay.terrain.heights.flat()) - 0.5;
+  group.add(far);
+
+  const rockets = replay.rockets.map(rk => {
+    const model = buildRocket(replay.meta.rocket);
+    const trail = buildTrail(rk.frames, colorFor(rk.outcome));
+    const burst = buildBurst(), ring = buildRing(colorFor(rk.outcome)), dust = buildDust(style.dust);
+    group.add(model.root, trail, burst.g, ring, dust.g);
+    return { ...rk, model, trail, burst, ring, dust, tEnd: rk.end * replay.meta.dt };
+  });
+  // the catch arms close around the first rocket that lands on the pad
+  const pd = replay.meta.pad;
+  const isCatch = replay.meta.task === "catch";
+  const onPad = rockets.filter(r => r.outcome === "caught" ||
+    (r.outcome === "landed" && Math.hypot(r.frames.at(-1)[F.x] - pd[0], r.frames.at(-1)[F.z] - pd[2]) < replay.meta.pad_radius * 1.2));
+  if (isCatch) {   // faint ring marking where the catch point has to settle
+    const ct = replay.meta.tower.catch_target;
+    const zone = new THREE.Mesh(new THREE.TorusGeometry(replay.meta.tower.catch_radius, 0.06, 8, 48),
+      new THREE.MeshBasicMaterial({ color: 0x7fe3ff, transparent: true, opacity: 0.7 }));
+    zone.rotation.x = Math.PI / 2; zone.position.set(...ct);
+    group.add(zone);
+  }
+  const focus = onPad.sort((a, b) => a.tEnd - b.tEnd)[0] ?? null;
+  const onPadSet = new Set(onPad);
+  const padLocal = tower.group.worldToLocal(new THREE.Vector3(pd[0], pd[1], pd[2]));
+  const duration = Math.max(...rockets.map(r => r.tEnd)) + (focus ? 4 : 2.5);
+  world = { group, replay, rockets, duration, ground: terrain.ground, vacuum: body === "moon",
+    catcher: { tower, focus, padLocal, onPadSet }, isCatch };
+
+  // camera: look at the pad from a distance that frames the start positions
+  const p = replay.meta.pad;
+  const spread = Math.max(...rockets.map(r => Math.hypot(r.frames[0][F.x] - p[0], r.frames[0][F.z] - p[2])), 60);
+  const top = Math.max(...rockets.map(r => r.frames[0][F.y]));
+  controls.target.set(p[0], p[1] + top * 0.35, p[2]);
+  camera.position.set(p[0] + spread * 1.6, p[1] + top * 0.9, p[2] + spread * 1.6);
+  sun.position.set(p[0] + 200, p[1] + 400, p[2] + 120); sun.target.position.set(p[0], p[1], p[2]);
+
+  selected = Math.min(selected, rockets.length - 1);
+  t = startAt; startAt = 0; playing = true;
+  if (viewParam === "pad") framePad();
+  if (viewParam === "rocket") { frameRocketNext = true; document.getElementById("follow").checked = true; }
+  viewParam = null;
+  renderRocketList();
+  const landed = rockets.filter(r => r.outcome === "landed" || r.outcome === "caught").length;
+  label = label ?? "replay";
+  document.getElementById("subtitle").textContent = label.includes(body) ? label : `${label} · ${body}`;
+  document.getElementById("tally").textContent = `${landed}/${rockets.length} ${isCatch ? "caught" : "landed"}`;
+  applyScale();
+}
+
+// camera presets: P frames the landing zone and tower, R moves in close on the selected rocket
+let viewParam = params.get("view"), frameRocketNext = false;
+function framePad() {
+  if (!world) return;
+  const p = world.replay.meta.pad, L = world.replay.meta.rocket.length;
+  document.getElementById("follow").checked = false;
+  controls.target.set(p[0] - 4, p[1] + L * 0.8, p[2] - 4);
+  camera.position.set(p[0] + L * 3.2, p[1] + L * 1.5, p[2] + L * 1.2);
+}
+function frameRocket() {
+  if (!world) return;
+  const q = world.rockets[selected].model.root.position, L = world.replay.meta.rocket.length;
+  controls.target.copy(q);
+  camera.position.set(q.x + L * 1.4, q.y + L * 0.35, q.z + L * 1.1);
+}
+
+function renderRocketList() {
+  const box = document.getElementById("rockets"); box.innerHTML = "";
+  world.rockets.forEach((r, i) => {
+    const el = document.createElement("div");
+    el.className = "rk" + (i === selected ? " sel" : "");
+    el.title = `${r.outcome} · return ${r.return}`;
+    el.innerHTML = `<span class="dot" style="background:#${colorFor(r.outcome).toString(16).padStart(6, "0")}"></span>#${i + 1}`;
+    el.onclick = () => { selected = i; renderRocketList(); };
+    box.appendChild(el);
+  });
+}
+
+function applyScale() {
+  const s = document.getElementById("big").checked ? 3 : 1;
+  world?.rockets.forEach(r => r.model.root.scale.setScalar(s));
+}
+
+// ---------------------------------------------------------------- per-frame update
+const qa = new THREE.Quaternion(), qb = new THREE.Quaternion(), up = new THREE.Vector3();
+function sample(frames, ft) {
+  const i = Math.min(Math.floor(ft), frames.length - 1), j = Math.min(i + 1, frames.length - 1), a = ft - i;
+  const A = frames[i], B = frames[j];
+  const lerp = k => A[k] + (B[k] - A[k]) * Math.min(Math.max(a, 0), 1);
+  qa.set(A[F.qx], A[F.qy], A[F.qz], A[F.qw]); qb.set(B[F.qx], B[F.qy], B[F.qz], B[F.qw]);
+  return { x: lerp(F.x), y: lerp(F.y), z: lerp(F.z), q: qa.clone().slerp(qb, Math.min(Math.max(a, 0), 1)),
+    thr: lerp(F.thr), gx: lerp(F.gx), gz: lerp(F.gz), fuel: lerp(F.fuel), com: lerp(F.com), i, j };
+}
+
+function update(dtReal) {
+  if (!world) return;
+  const dt = world.replay.meta.dt;
+  if (playing) {
+    t += dtReal * +document.getElementById("speed").value;
+    if (t > world.duration) { t = world.duration; playing = false; setPlayIcon(); onReplayEnd(); }
+  }
+  document.getElementById("timeline").value = Math.round((t / world.duration) * 1000);
+  document.getElementById("time").textContent = `${Math.min(t, world.duration).toFixed(1)} / ${world.duration.toFixed(0)} s`;
+  const showTrails = document.getElementById("trails").checked;
+  const scale = document.getElementById("big").checked ? 3 : 1;
+  const now = performance.now() / 1000, spec = world.replay.meta.rocket;
+  const fade = world.rockets.length > 1 && document.getElementById("ghost").checked;
+  const clamp01 = v => Math.min(Math.max(v, 0), 1), smooth = v => { v = clamp01(v); return v * v * (3 - 2 * v); };
+
+  world.rockets.forEach((r, idx) => {
+    const ft = Math.min(t / dt, r.frames.length - 1), s = sample(r.frames, ft), m = r.model;
+    const ended = t >= r.tEnd;
+    const crashed = ended && colorFor(r.outcome) === 0xff5d5d;
+    setGhost(m, fade && idx !== selected);
+    m.root.position.set(s.x, s.y, s.z);
+    m.root.quaternion.copy(s.q);
+    m.body.position.y = -s.com;
+    m.gimbal.rotation.set(s.gx, 0, s.gz, "XZY");   // thrust axis = Rx(gx)·Rz(gz)·ŷ, as in physics.py
+    const clear = s.y - (spec.length / 2 + spec.leg_drop + s.com) - world.ground(s.x, s.z);
+    setLegs(m, world.isCatch ? 0 : smooth((45 - clear) / 25));        // legs swing out over the last ~45 m (not for a catch)
+
+    const on = s.thr > 0.05 && s.fuel > 0 && !ended;
+    const flicker = 0.88 + 0.12 * Math.sin(now * 47 + m.phase) * Math.sin(now * 13 + m.phase * 3);
+    const len = on ? (3 + 10 * s.thr) * flicker * (world.vacuum ? 0.6 : 1) : 0;
+    m.plume.visible = on;
+    if (on) {
+      const wide = world.vacuum ? 2.8 : 1 + 0.15 * flicker;           // no ambient pressure: the plume balloons
+      m.sheath.scale.set(wide, len, wide);
+      m.core.scale.set(1, len * 0.45, 1);
+      m.diamonds.forEach((d, k) => {
+        d.visible = !world.vacuum && s.thr > 0.35;
+        d.position.y = -len * (0.09 + 0.12 * k);
+        d.scale.set(1 - 0.15 * k, 1.9 * (1 - 0.1 * k), 1 - 0.15 * k);
+      });
+    }
+    m.hotMat.emissiveIntensity = on ? 1.4 * s.thr : 0;
+    m.light.intensity = on ? 60 * s.thr : 0;
+    // crashed boosters vanish into the fireball; ghosts clear off the pad once their flight is over
+    m.root.visible = !(crashed && t > r.tEnd + 0.15) && !(m.ghost && t > r.tEnd + 1.0);
+
+    // ground dust kicked up by the plume, and settling after touchdown
+    const since0 = t - r.tEnd;
+    let k = on && clear < 25 ? s.thr * (1 - Math.max(clear, 0) / 25) : 0;
+    if (ended && !crashed && since0 < 2.5) k = Math.max(k, 0.5 * (1 - since0 / 2.5));
+    r.dust.g.visible = k > 0.01;
+    if (r.dust.g.visible) {
+      r.dust.g.position.set(s.x, world.ground(s.x, s.z), s.z);
+      r.dust.mat.opacity = 0.42 * k;
+      r.dust.puffs.forEach((p, i) => {
+        const a = i * Math.PI / 6 + t * 0.25 + m.phase;
+        const rad = (2.5 + 7 * k + 1.2 * Math.sin(i * 1.7 + t)) * scale;
+        p.position.set(Math.cos(a) * rad, (0.6 + 0.4 * Math.sin(i + t)) * scale, Math.sin(a) * rad);
+        p.scale.setScalar((1.2 + 2.8 * k) * scale * (0.8 + 0.04 * ((i * 37) % 10)));
+      });
+    }
+
+    r.trail.visible = showTrails;
+    r.trail.geometry.setDrawRange(0, Math.max(Math.floor(ft) + 1, 1));
+    r.trail.material.opacity = idx === selected ? 0.95 : 0.45;
+
+    // end-of-episode effects
+    const since = t - r.tEnd;
+    r.burst.g.visible = crashed && since < 3;
+    if (r.burst.g.visible) {
+      const k = Math.max(since, 0);
+      r.burst.g.position.set(s.x, s.y, s.z);
+      r.burst.fire.scale.setScalar((2 + 7 * Math.min(k / 0.5, 1)) * scale);
+      r.burst.fire.material.opacity = Math.max(1 - k / 0.9, 0);
+      r.burst.smoke.scale.setScalar((2 + 3 * k) * scale);
+      r.burst.smoke.position.y = 3 * k;
+      r.burst.smoke.material.opacity = Math.max(0.35 - k / 8, 0);
+    }
+    r.ring.visible = ended && !crashed && since < 2.5;
+    if (r.ring.visible) {
+      r.ring.position.set(s.x, world.ground(s.x, s.z) + 0.15, s.z);
+      r.ring.scale.setScalar(3 + 10 * since);
+      r.ring.material.opacity = Math.max(1 - since / 2.5, 0);
+    }
+  });
+
+  // catch arms: open while waiting, close around the focus rocket after it lands
+  const cat = world.catcher;
+  if (cat) {
+    const sel = world.rockets[selected];
+    const f = cat.onPadSet.has(sel) ? sel : cat.focus;   // prefer the rocket you're watching
+    // catch: arms close during the hold that ends at tEnd; landing: they close after touchdown
+    const c = !f ? 0 : world.isCatch ? smooth((t - f.tEnd + 0.5) / 0.6) : smooth((t - f.tEnd - 0.4) / 2.2);
+    const target = f ? cat.tower.group.worldToLocal(f.model.root.position.clone()) : cat.padLocal;
+    for (const arm of cat.tower.arms) {
+      const open = armYaw(arm.pivot, cat.padLocal, arm.side, 0) - arm.side * 0.6;
+      const closed = armYaw(arm.pivot, target, arm.side, cat.tower.rocketR * scale + 0.3 + cat.tower.armHalf);
+      arm.pivot.rotation.y = open + (closed - open) * c;
+    }
+  }
+
+  if (frameRocketNext) { frameRocketNext = false; frameRocket(); }
+  // follow camera: move the orbit target with the selected rocket, keeping the user's view offset
+  const sel = world.rockets[selected];
+  if (sel && document.getElementById("follow").checked) {
+    const p = sel.model.root.position;
+    const delta = new THREE.Vector3(p.x, p.y, p.z).sub(controls.target).multiplyScalar(0.08);
+    controls.target.add(delta); camera.position.add(delta);
+  }
+  renderHud(sel);
+}
+
+function catchRows(s, spec, row) {
+  const ct = world.replay.meta.tower.catch_target;
+  const cp = new THREE.Vector3(0, spec.length / 2 - 1.9 - s.com, 0).applyQuaternion(s.q).add(new THREE.Vector3(s.x, s.y, s.z));
+  const h = Math.hypot(cp.x - ct[0], cp.z - ct[2]), dy = cp.y - ct[1];
+  const ok = h <= world.replay.meta.tower.catch_radius ? "var(--ok)" : "var(--text)";
+  return row("catch offset (horiz.)", `<span style="color:${ok}">${h.toFixed(1)} m</span>`)
+    + row("above catch height", `${dy.toFixed(1)} m`);
+}
+
+function renderHud(r) {
+  const hud = document.getElementById("hud");
+  if (!r) { hud.innerHTML = ""; return; }
+  const dt = world.replay.meta.dt, spec = world.replay.meta.rocket;
+  const ft = Math.min(t / dt, r.frames.length - 1), s = sample(r.frames, ft);
+  const A = r.frames[s.i], B = r.frames[Math.min(s.i + 1, r.frames.length - 1)];
+  const v = s.i === r.frames.length - 1 ? [0, 0, 0] : [0, 1, 2].map(k => (B[k] - A[k]) / dt);
+  up.set(0, 1, 0).applyQuaternion(s.q);
+  const tilt = Math.acos(Math.min(Math.max(up.y, -1), 1)) * 180 / Math.PI;
+  const clear = s.y - (spec.length / 2 + spec.leg_drop + s.com) - world.ground(s.x, s.z);
+  const p = world.replay.meta.pad;
+  const status = t >= r.tEnd ? r.outcome.replace(/_/g, " ") : "flying";
+  const color = t >= r.tEnd ? "#" + colorFor(r.outcome).toString(16).padStart(6, "0") : "var(--text)";
+  const row = (k, val) => `<div class="row"><span>${k}</span><span>${val}</span></div>`;
+  hud.innerHTML = `<div class="title">Rocket #${selected + 1} · <span style="color:${color}">${status}</span></div>`
+    + (world.isCatch ? row("altitude (base)", `${Math.max(clear + spec.leg_drop, 0).toFixed(1)} m`)
+                     : row("altitude (legs)", `${Math.max(clear, 0).toFixed(1)} m`))
+    + row("vertical speed", `${v[1].toFixed(1)} m/s`)
+    + row("horizontal speed", `${Math.hypot(v[0], v[2]).toFixed(1)} m/s`)
+    + (world.isCatch ? catchRows(s, spec, row) : row("distance to pad", `${Math.hypot(s.x - p[0], s.z - p[2]).toFixed(1)} m`))
+    + row("tilt", `${tilt.toFixed(1)}°`)
+    + row("gimbal", `${(s.gx * 180 / Math.PI).toFixed(1)}°, ${(s.gz * 180 / Math.PI).toFixed(1)}°`)
+    + row("throttle", `${(s.thr * 100).toFixed(0)}%`) + `<div class="bar"><i style="width:${s.thr * 100}%"></i></div>`
+    + row("fuel", `${(s.fuel * 100).toFixed(0)}%`) + `<div class="bar"><i style="width:${s.fuel * 100}%;background:var(--soft)"></i></div>`
+    + row("episode return", r.return.toFixed(1));
+}
+
+// ---------------------------------------------------------------- manifest / training view
+let manifest = [], current = null;
+async function fetchJSON(url) { const r = await fetch(url, { cache: "no-store" }); if (!r.ok) throw new Error(r.status); return r.json(); }
+
+async function openEntry(entry) {
+  current = entry.file;
+  document.getElementById("source").value = entry.file;
+  load(await fetchJSON(`${DIR}/${entry.file}`), entry.label);
+  drawCurve();
+}
+
+async function pollManifest(first = false) {
+  let m;
+  try { m = await fetchJSON(`${DIR}/manifest.json`); } catch { if (first && !world) showEmpty(true); return; }
+  showEmpty(false);
+  const changed = JSON.stringify(m) !== JSON.stringify(manifest);
+  manifest = m;
+  if (!changed) return;
+  const sel = document.getElementById("source");
+  sel.innerHTML = manifest.map(e => `<option value="${e.file}">${e.label} — ${
+    e.outcome ? e.outcome.replace(/_/g, " ") : `${e.landed}/${e.total} landed`}</option>`).join("");
+  if (current) sel.value = current;
+  drawCurve();
+  if (first && manifest.length) openEntry(manifest.find(e => e.file === params.get("file")) ?? newest());
+}
+const training = () => manifest.filter(e => e.step != null);
+const newest = () => training().at(-1) ?? manifest.at(-1);
+function onReplayEnd() {
+  if (serverMode) {
+    if (document.getElementById("auto").checked && !launching) setTimeout(() => {
+      if (document.getElementById("autoRandom").checked) randomizeSliders();
+      doLaunch();
+    }, 800);
+    return;
+  }
+  // after a replay finishes, hop to a newer training snapshot if one arrived
+  const n = newest();
+  if (document.getElementById("live").checked && n && n.file !== current) setTimeout(() => openEntry(n), 1200);
+}
+
+function drawCurve() {
+  if (serverMode) return drawLaunchCurve();
+  const svg = document.getElementById("curve"), pts = training();
+  const W = 272, H = 110, pad = 8;
+  if (pts.length < 1) { svg.innerHTML = `<text x="8" y="56" fill="#8a97ab" font-size="11">Appears while train.py runs</text>`; return; }
+  const xs = pts.map(e => e.step), maxX = Math.max(...xs, 1), minX = Math.min(...xs);
+  const rets = pts.map(e => e.mean_return), rlo = Math.min(...rets), rhi = Math.max(...rets);
+  const X = s => pad + (W - 2 * pad) * (maxX === minX ? 0.5 : (s - minX) / (maxX - minX));
+  const Ys = f => H - pad - (H - 2 * pad) * f;
+  const Yr = v => Ys(rhi === rlo ? 0.5 : (v - rlo) / (rhi - rlo));
+  const path = (fn) => pts.map((e, i) => `${i ? "L" : "M"}${X(e.step).toFixed(1)},${fn(e).toFixed(1)}`).join("");
+  svg.innerHTML =
+    `<line x1="${pad}" x2="${W - pad}" y1="${H - pad}" y2="${H - pad}" stroke="#263042"/>`
+    + `<path d="${path(e => Yr(e.mean_return))}" fill="none" stroke="#6aa8ff" stroke-width="1.5"/>`
+    + `<path d="${path(e => Ys(e.landed / e.total))}" fill="none" stroke="#3fd18b" stroke-width="2"/>`
+    + pts.map(e => `<circle class="pt" data-f="${e.file}" cx="${X(e.step)}" cy="${Ys(e.landed / e.total)}" r="${e.file === current ? 5 : 3}"
+        fill="${e.file === current ? "#ffb547" : "#3fd18b"}"><title>${e.label}: ${e.landed}/${e.total} landed, return ${e.mean_return}</title></circle>`).join("")
+    + `<text x="${pad}" y="12" fill="#8a97ab" font-size="10">${(minX / 1e6).toFixed(2)}M → ${(maxX / 1e6).toFixed(2)}M steps</text>`;
+  svg.querySelectorAll(".pt").forEach(c => c.onclick = () => openEntry(manifest.find(e => e.file === c.dataset.f)));
+}
+function showEmpty(v) { document.getElementById("empty").style.display = v && !serverMode ? "grid" : "none"; }
+
+// ---------------------------------------------------------------- launch control (play.py)
+const SLIDERS = [
+  ["altitude", "Altitude", v => `${v.toFixed(0)} m`, 1, 180],
+  ["descent", "Descent", v => `${v.toFixed(0)} m/s`, 1, 15],
+  ["offset_x", "Pad offset x", v => `${v.toFixed(0)} m`, 1, 40],
+  ["offset_z", "Pad offset z", v => `${v.toFixed(0)} m`, 1, -30],
+  ["drift_x", "Drift x", v => `${v.toFixed(1)} m/s`, 0.5, 0],
+  ["drift_z", "Drift z", v => `${v.toFixed(1)} m/s`, 0.5, 0],
+  ["tilt_deg", "Tilt", v => `${v.toFixed(0)}°`, 1, 5],
+  ["fuel", "Fuel", v => `${(v * 100).toFixed(0)}%`, 0.01, 0.85],
+];
+let pilot = "ppo", body = "earth", task = params.get("task") === "catch" ? "catch" : "land", launching = false, serverState = null;
+const stateURL = () => `/api/state?task=${task}`;
+
+async function initServer() {
+  try { serverState = await fetchJSON(stateURL()); } catch { return; }
+  serverMode = true;
+  DIR = serverState.replay_dir;
+  document.getElementById("launchPanel").hidden = false;
+  document.getElementById("liveRow").style.display = "none";
+  document.getElementById("live").checked = false;
+  document.getElementById("replayHead").textContent = "Launch history";
+  document.getElementById("curveHead").textContent = "Launches";
+  document.getElementById("curveLegend").innerHTML =
+    `<span style="--c:var(--ok)">landed</span><span style="--c:var(--bad)">crashed</span>`
+    + `<span style="--c:#9aa6b8">other</span><span style="--c:var(--accent)">landed % (last 10)</span>`;
+  document.getElementById("subtitle").textContent = "Set the conditions and press Launch";
+
+  const box = document.getElementById("sliders");
+  box.innerHTML = SLIDERS.map(([k, label, , step, def]) => {
+    const [lo, hi] = serverState.limits[k];
+    return `<div class="sl"><div class="lab"><span>${label}</span><b id="v_${k}"></b></div>
+      <input type="range" id="s_${k}" min="${lo}" max="${hi}" step="${step}" value="${def}"></div>`;
+  }).join("");
+  SLIDERS.forEach(([k, , fmt]) => {
+    const el = document.getElementById(`s_${k}`), out = document.getElementById(`v_${k}`);
+    const show = () => out.textContent = fmt(+el.value);
+    el.oninput = show; show();
+  });
+
+  const roll = serverState.rollout_steps;
+  document.getElementById("trainSteps").innerHTML = [0, 1, 3, 6, 15, 60].map(n =>
+    `<option value="${n * roll}" ${n === 3 ? "selected" : ""}>${n ? `${(n * roll / 1000).toFixed(0)}k steps` : "none"}</option>`).join("");
+
+  const seg = (id, items, get, set) => {
+    const el = document.getElementById(id);
+    if (items) el.innerHTML = items.map(v => `<button data-v="${v}">${v[0].toUpperCase() + v.slice(1)}</button>`).join("");
+    const paint = () => el.querySelectorAll("button").forEach(b => b.classList.toggle("on", b.dataset.v === get()));
+    el.onclick = e => { const v = e.target.dataset?.v; if (v) { set(v); paint(); } };
+    paint();
+  };
+  seg("pilot", null, () => pilot, v => { pilot = v; document.getElementById("trainSteps").disabled = v !== "ppo"; });
+  seg("taskSel", null, () => task, v => { if (!launching) switchTask(v); });
+  seg("bodySel", serverState.bodies, () => body, v => body = v);
+  document.getElementById("launch").onclick = doLaunch;
+  document.getElementById("randomize").onclick = randomizeSliders;
+  document.getElementById("resetModel").onclick = async () => {
+    if (!confirm("Delete the interactive model and every launch in its history?")) return;
+    serverState = await (await fetch(`/api/reset?task=${task}`, { method: "POST" })).json();
+    manifest = []; current = null;
+    document.getElementById("source").innerHTML = "";
+    drawCurve(); renderStatus();
+  };
+  renderStatus();
+}
+
+// Each task has its own model and launch history on the server.
+async function switchTask(v) {
+  if (v === task) return;
+  task = v;
+  document.getElementById("lstatus").textContent = "Loading model…";
+  serverState = await fetchJSON(stateURL());
+  DIR = serverState.replay_dir;
+  manifest = []; current = null;
+  document.getElementById("source").innerHTML = "";
+  drawCurve(); renderStatus();
+  pollManifest(true);
+}
+
+function randomizeSliders() {
+  SLIDERS.forEach(([k]) => {
+    const el = document.getElementById(`s_${k}`), lo = +el.min, hi = +el.max, st = +el.step;
+    el.value = Math.round((lo + Math.random() * (hi - lo)) / st) * st;
+    el.oninput();
+  });
+}
+
+function renderStatus(err) {
+  const el = document.getElementById("lstatus"), bar = document.getElementById("lbar");
+  el.classList.toggle("err", !!err);
+  if (err) { el.textContent = err; bar.hidden = true; return; }
+  const st = serverState?.status ?? { phase: "idle" };
+  bar.hidden = st.phase !== "training";
+  if (st.phase === "training") {
+    el.textContent = `Training… ${st.done.toLocaleString()} / ${st.total.toLocaleString()} steps`;
+    bar.firstElementChild.style.width = `${(100 * st.done / Math.max(st.total, 1)).toFixed(1)}%`;
+  } else if (st.phase === "flying") {
+    el.textContent = "Flying…";
+  } else {
+    el.textContent = `Model: ${(serverState.model_steps / 1e6).toFixed(2)}M steps trained · ${serverState.launches} launches`;
+  }
+}
+
+async function doLaunch() {
+  if (launching) return;
+  launching = true;
+  const btn = document.getElementById("launch");
+  btn.disabled = true; btn.textContent = "Launching…";
+  const req = { task, pilot, body, train_steps: +document.getElementById("trainSteps").value };
+  SLIDERS.forEach(([k]) => req[k] = +document.getElementById(`s_${k}`).value);
+  const poll = setInterval(async () => { try { serverState = await fetchJSON(stateURL()); renderStatus(); } catch {} }, 400);
+  let err = null;
+  try {
+    const res = await fetch("/api/launch", { method: "POST", body: JSON.stringify(req) });
+    const replay = await res.json();
+    if (replay.error) throw new Error(replay.error);
+    current = replay.meta.file;
+    load(replay, replay.meta.label);
+    await pollManifest();
+  } catch (e) {
+    err = `Launch failed: ${e.message}`;
+    document.getElementById("auto").checked = false;
+  } finally {
+    clearInterval(poll);
+    try { serverState = await fetchJSON(stateURL()); } catch {}
+    launching = false;
+    btn.disabled = false; btn.textContent = "Launch";
+    renderStatus(err);
+  }
+}
+
+function drawLaunchCurve() {
+  const svg = document.getElementById("curve");
+  const pts = manifest.filter(e => e.launch != null);
+  const W = 272, H = 110, pad = 8;
+  if (!pts.length) { svg.innerHTML = `<text x="8" y="56" fill="#8a97ab" font-size="11">Each launch shows up here</text>`; return; }
+  const n = pts.length, rets = pts.map(e => e.mean_return);
+  const lo = Math.min(...rets), hi = Math.max(...rets);
+  const X = i => pad + (W - 2 * pad) * (n === 1 ? 0.5 : i / (n - 1));
+  const Y = f => H - pad - (H - 2 * pad) * f;
+  const Yr = v => Y(hi === lo ? 0.5 : (v - lo) / (hi - lo));
+  // rolling landed rate over the last 10 launches
+  const rate = pts.map((_, i) => { const w = pts.slice(Math.max(0, i - 9), i + 1); return w.filter(e => e.outcome === "landed" || e.outcome === "caught").length / w.length; });
+  const dot = e => e.outcome === "landed" || e.outcome === "caught" ? "#3fd18b" : (colorFor(e.outcome) === 0xff5d5d ? "#ff5d5d" : "#9aa6b8");
+  svg.innerHTML =
+    `<line x1="${pad}" x2="${W - pad}" y1="${H - pad}" y2="${H - pad}" stroke="#263042"/>`
+    + `<path d="${rate.map((r, i) => `${i ? "L" : "M"}${X(i).toFixed(1)},${Y(r).toFixed(1)}`).join("")}" fill="none" stroke="#ffb547" stroke-width="1.5" opacity=".8"/>`
+    + pts.map((e, i) => `<circle class="pt" data-f="${e.file}" cx="${X(i)}" cy="${Yr(e.mean_return)}" r="${e.file === current ? 5 : 3}"
+        fill="${dot(e)}" stroke="${e.file === current ? "#fff" : "none"}" ${e.pilot === "pd" ? 'fill-opacity=".45"' : ""}>
+        <title>${e.label}: ${e.outcome}, return ${e.mean_return}</title></circle>`).join("")
+    + `<text x="${pad}" y="12" fill="#8a97ab" font-size="10">launch 1 → ${n} · return (dots), landed % (line)</text>`;
+  svg.querySelectorAll(".pt").forEach(c => c.onclick = () => openEntry(manifest.find(e => e.file === c.dataset.f)));
+}
+
+// ---------------------------------------------------------------- controls
+const setPlayIcon = () => document.getElementById("play").textContent = playing ? "❚❚" : "▶";
+document.getElementById("play").onclick = () => {
+  if (world && t >= world.duration) t = 0;
+  playing = !playing; setPlayIcon();
+};
+document.getElementById("restart").onclick = () => { t = 0; playing = true; setPlayIcon(); };
+document.getElementById("timeline").oninput = e => { if (world) { t = (e.target.value / 1000) * world.duration; } };
+document.getElementById("source").onchange = e => openEntry(manifest.find(m => m.file === e.target.value));
+document.getElementById("big").onchange = applyScale;
+document.getElementById("file").onchange = async e => {
+  const f = e.target.files[0]; if (!f) return;
+  document.getElementById("live").checked = false;
+  showEmpty(false); current = null;
+  load(JSON.parse(await f.text()), f.name.replace(/\.json$/, ""));
+};
+addEventListener("keydown", e => {
+  if (e.target.tagName === "INPUT" && e.target.type !== "range") return;
+  if (e.code === "Space") { e.preventDefault(); document.getElementById("play").click(); }
+  if (e.key === "l" && serverMode) doLaunch();
+  if (e.key === "p") framePad();
+  if (e.key === "r") frameRocket();
+  if (!world) return;
+  if (e.key === "ArrowRight") { selected = (selected + 1) % world.rockets.length; renderRocketList(); }
+  if (e.key === "ArrowLeft") { selected = (selected - 1 + world.rockets.length) % world.rockets.length; renderRocketList(); }
+});
+
+// ---------------------------------------------------------------- orbital mission (mission.js, needs play.py)
+let renderHook = null, openMissionCb = null;
+const viewerAPI = {
+  renderer, buildRocket, setLegs, MAT, fetchJSON,
+  get serverState() { return serverState; },
+  get task() { return task; },
+  setMainControls: on => { controls.enabled = on; },
+  setRenderHook: fn => { renderHook = fn; },
+  onOpenMission: fn => { openMissionCb = fn; },
+  showReplay: replay => { current = replay.meta.file; load(replay, replay.meta.label); pollManifest(); },
+};
+document.getElementById("openMission").onclick = () => openMissionCb?.();
+async function initMission() {
+  if (!serverMode || !serverState?.launch_sites) return;
+  const btn = document.getElementById("openMission");
+  btn.hidden = false;
+  if (params.get("mode") === "classic") { btn.onclick = () => startMission(true); return; }
+  await startMission(false);
+}
+let missionLoaded = false;
+async function startMission(open) {
+  if (missionLoaded) return openMissionCb?.();
+  missionLoaded = true;
+  try {
+    (await import("./mission.js")).initMission(viewerAPI);
+  } catch (e) {
+    console.error(e);
+    document.getElementById("lstatus").textContent = `Mission control failed to load: ${e.message}`;
+  }
+  document.getElementById("openMission").onclick = () => openMissionCb?.();
+}
+
+let last = performance.now();
+renderer.setAnimationLoop(now => {
+  const d = Math.min((now - last) / 1000, 0.1); last = now;
+  if (renderHook?.(d)) return;
+  update(d);
+  controls.update();
+  renderer.render(scene, camera);
+});
+initServer().finally(() => { pollManifest(true); setInterval(pollManifest, 5000); initMission(); });
+</script>
+</body>
+</html>
