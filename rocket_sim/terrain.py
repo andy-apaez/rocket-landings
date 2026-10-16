@@ -14,7 +14,6 @@ def _upsample(coarse: np.ndarray, size: int) -> np.ndarray:
     t = np.linspace(0, c - 1, size)
     i0 = np.clip(np.floor(t).astype(int), 0, c - 2)
     f = t - i0
-    # interpolate along axis 1, then axis 2
     a = coarse[:, i0, :] * (1 - f)[None, :, None] + coarse[:, i0 + 1, :] * f[None, :, None]
     return a[:, :, i0] * (1 - f)[None, None, :] + a[:, :, i0 + 1] * f[None, None, :]
 
@@ -28,13 +27,14 @@ class Terrain:
         self.heights = np.zeros((num_envs, cfg.grid, cfg.grid))
         self.pad = np.zeros((num_envs, 3))  # pad center (x, y, z)
 
-    # ------------------------------------------------------------------ generation
+    # Generation
     def regenerate(self, idx: np.ndarray, rng: np.random.Generator):
         """Build new terrain and pad locations for the envs in idx."""
         cfg = self.cfg
         m = len(idx)
         if m == 0:
             return
+        # Noise: octaves of upsampled random grids
         g = cfg.grid
         h = np.zeros((m, g, g))
         if cfg.randomize:
@@ -47,7 +47,7 @@ class Terrain:
         if not cfg.randomize:
             pad_xz[:] = 0.0
 
-        # Flatten around the pad with a smoothstep blend toward the pad height.
+        # Pad: flatten around it with a smoothstep blend toward the pad height
         axis = np.linspace(-self.size / 2, self.size / 2, g)
         dx = axis[None, :, None] - pad_xz[:, 0, None, None]
         dz = axis[None, None, :] - pad_xz[:, 1, None, None]
@@ -60,7 +60,7 @@ class Terrain:
         self.heights[idx] = pad_h[:, None, None] * (1 - w) + h * w
         self.pad[idx] = np.stack([pad_xz[:, 0], pad_h, pad_xz[:, 1]], axis=1)
 
-    # ------------------------------------------------------------------ queries
+    # Queries
     def _bilinear(self, xz: np.ndarray, idx: np.ndarray | None):
         """xz: (M, K, 2). Returns heights (M, K) and gradient (M, K, 2) = (dh/dx, dh/dz)."""
         hm = self.heights if idx is None else self.heights[idx]

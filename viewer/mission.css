@@ -12,7 +12,7 @@
 #mission .num, #mission .mono { font-variant-numeric: tabular-nums; font-family: ui-monospace, "SF Mono", Menlo, monospace; }
 #mission .lbl { font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: var(--m-muted); }
 
-/* top bar */
+/* Header */
 #mTop { left: 0; right: 0; top: 0; height: 48px; display: flex; align-items: center; gap: 22px; padding: 0 16px;
   border-width: 0 0 1px; }
 #mTop .brand { display: flex; align-items: center; gap: 9px; font-weight: 700; letter-spacing: .02em; }
@@ -40,7 +40,7 @@
 #mission button.go.amber { background: var(--m-amber); border-color: var(--m-amber); color: #1b1407; }
 #mission button.go:disabled { opacity: .4; }
 
-/* left sidebar */
+/* Sidebar */
 #mLeft { left: 0; top: 48px; bottom: 0; width: 272px; border-width: 0 1px 0 0; overflow: auto; padding: 16px 14px 18px; }
 #mLeft h1 { margin: 6px 0 0; font-size: 26px; font-weight: 700; letter-spacing: -.01em; }
 #mLeft .count { color: var(--m-muted); font-size: 12.5px; margin: 2px 0 14px; }
@@ -60,7 +60,7 @@
 .mev span.done.k { color: var(--m-green); }
 .mev span.cur { color: var(--m-amber); }
 
-/* form controls */
+/* Forms */
 .mfield { margin: 10px 0; }
 .mfield .lab { display: flex; justify-content: space-between; color: var(--m-muted); font-size: 12px; margin-bottom: 4px; }
 .mfield .lab b { color: var(--m-text); font-weight: 500; }
@@ -75,7 +75,7 @@
 .mlink { pointer-events: auto; background: none; border: 0; color: var(--m-muted); font: inherit; font-size: 11.5px; padding: 0;
   margin-top: 12px; text-decoration: underline; cursor: pointer; }
 
-/* right column */
+/* Panel */
 #mRight { position: absolute; right: 12px; top: 60px; width: 300px; bottom: 70px; display: flex; flex-direction: column; gap: 10px; pointer-events: none; }
 #mRight > .mp { position: relative; border-radius: 12px; }
 #mHolo { height: 300px; flex: none; overflow: hidden; background: radial-gradient(ellipse at 50% 85%, rgba(94, 230, 255, .09), transparent 60%),
@@ -101,7 +101,7 @@
 .mnote.bad { color: var(--m-red); }
 .mnote.ok { color: var(--m-green); }
 
-/* telemetry card */
+/* Telemetry */
 #mCard { left: 288px; bottom: 16px; width: 330px; border-radius: 12px; padding: 12px 14px; }
 #mCard .top { display: flex; justify-content: space-between; align-items: center; }
 #mCard .top .lbl { color: var(--m-violet); }
@@ -112,7 +112,7 @@
 #mCard .grid div { background: #0a1118; padding: 7px 9px; }
 #mCard .grid b { display: block; font-size: 15px; font-weight: 600; margin-top: 1px; }
 
-/* warp + center overlays */
+/* Overlays: warp and center */
 #mWarp { left: 50%; bottom: 16px; transform: translateX(-50%); margin-left: 140px; display: flex; gap: 4px; align-items: center;
   padding: 6px; border-radius: 10px; }
 #mWarp .lbl { padding: 0 6px; }
@@ -134,7 +134,7 @@
 #mFade { position: fixed; inset: 0; background: #000; opacity: 0; transition: opacity .7s; pointer-events: none; z-index: 30; }
 #mFade.on { opacity: 1; }
 
-/* bar shown over the landing replay */
+/* Replay: bar shown over the landing replay */
 #mReturn { position: fixed; left: 50%; top: 12px; transform: translateX(-50%); z-index: 19; display: flex; align-items: center; gap: 10px;
   padding: 7px 8px 7px 14px; border-radius: 10px; background: rgba(9, 14, 20, .9); border: 1px solid #223140; color: #e3ecf3;
   font: 12.5px/1.4 ui-sans-serif, system-ui, sans-serif; }

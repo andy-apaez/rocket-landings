@@ -3,7 +3,7 @@
 from dataclasses import dataclass, field
 import math
 
-G0 = 9.81  # standard gravity for the fuel burn formula (never changes)
+G0 = 9.81  # standard gravity for the fuel burn formula
 
 
 @dataclass
@@ -67,7 +67,7 @@ class SimConfig:
     max_time: float = 90.0            # s, episode time limit (low-g bodies descend slowly)
     world_height: float = 600.0       # m, ceiling for out-of-bounds
     num_envs: int = 64                # batch size N
-    # Reset randomization ranges
+    # Reset: randomization ranges
     start_offset: float = 80.0        # horizontal offset from pad, ± m
     start_altitude: tuple[float, float] = (120.0, 250.0)
     start_hvel: float = 10.0          # ± m/s horizontal
@@ -77,7 +77,7 @@ class SimConfig:
     start_fuel: tuple[float, float] = (0.6, 1.0)  # fraction of capacity
     bodies: tuple[str, ...] = ("earth",)          # sampled uniformly per episode
     terminate_on_fuel_empty: bool = False
-    # Landing-site weather (see orbit.site_conditions); None keeps the body's own wind.
+    # Weather: set by orbit.site_conditions; None keeps the body's own wind
     wind: tuple[float, float, float] | None = None    # mean wind, m/s
     wind_gust: float | None = None                    # std-dev of per-episode wind, m/s
 
@@ -96,16 +96,16 @@ class LandingCriteria:
 
 @dataclass
 class RewardWeights:
-    # per step (multiplied by the decision interval in seconds)
+    # Step: multiplied by the decision interval in seconds
     distance: float = 0.02
     speed: float = 0.02
     tilt: float = 0.5
     angvel: float = 0.5
     fuel: float = 1.0                 # per fraction of capacity burned
     time: float = 0.3                 # per second, discourages hovering
-    # potential-based shaping (makes progress toward the pad positive)
+    # Shaping: potential-based, so progress toward the pad is positive
     shaping: float = 30.0
-    # terminal
+    # Terminal
     landing_bonus: float = 100.0
     crash_penalty: float = 100.0
     fuel_bonus: float = 20.0          # × remaining fuel fraction on landing
@@ -118,12 +118,13 @@ class RewardWeights:
 class CatchConfig:
     """Catch tower geometry (used by both tasks, so the viewer draws it where the physics has it)
     and the criteria for the "catch" task."""
+    # Tower
     tower_distance: float = 17.0      # m, pad center to tower center
     tower_direction: tuple[float, float] = (-0.7071, -0.7071)  # unit xz vector, pad -> tower
     tower_width: float = 3.2          # m, square lattice
     tower_height: float = 28.0        # m
     collide: bool = True              # tower is solid in the catch task
-    # catch task
+    # Catch
     base_clearance: float = 4.0       # m, booster base above the pad when held in the arms
     catch_below_top: float = 1.9      # m, catch point below the top of the booster
     catch_radius: float = 1.5         # m, horizontal slack between the arms

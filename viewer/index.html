@@ -170,10 +170,10 @@ const BODY_STYLE = {
   mars:  { sky: 0xd9a37a, fog: 0xd8a781, low: [0.55, 0.27, 0.15], high: [0.78, 0.48, 0.30], dust: 0xb87a55 },
   moon:  { sky: 0x05070c, fog: 0x05070c, low: [0.35, 0.35, 0.37], high: [0.70, 0.70, 0.72], dust: 0xa3a3a6 },
 };
-// frame layout written by rocket_sim/replay.py
+// Frames: layout written by rocket_sim/replay.py
 const F = { x: 0, y: 1, z: 2, qw: 3, qx: 4, qy: 5, qz: 6, thr: 7, gx: 8, gz: 9, fuel: 10, com: 11 };
 
-// ---------------------------------------------------------------- scene
+// Scene
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.shadowMap.enabled = true;
@@ -201,7 +201,7 @@ let world = null;      // { group, replay, rockets: [...], duration, ground(x,z)
 let t = 0, playing = true, selected = +(params.get("rocket") || 1) - 1;
 let startAt = +(params.get("t") || 0);   // ?t=30 starts the first replay 30 s in
 
-// ---------------------------------------------------------------- builders
+// Builders
 function buildTerrain(tr, style) {
   const g = tr.grid, S = tr.size, c = S / (g - 1), H = tr.heights;
   const pos = new Float32Array(g * g * 3), col = new Float32Array(g * g * 3);
@@ -233,7 +233,7 @@ function buildTerrain(tr, style) {
   return { mesh, ground };
 }
 
-// ---------------------------------------------------------------- shared textures
+// Textures
 function canvasTex(w, h, draw, srgb = true) {
   const cv = document.createElement("canvas"); cv.width = w; cv.height = h;
   draw(cv.getContext("2d"), w, h);
@@ -328,7 +328,7 @@ function beam(a, b, th) {   // box geometry from point a to point b
 }
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
 
-// ---------------------------------------------------------------- landing zone
+// Pad
 function buildPad(meta, ground) {
   const p = meta.pad, apronR = meta.flat_radius ?? 12, targetR = meta.pad_radius;
   const g = new THREE.Group();
@@ -349,7 +349,7 @@ function buildPad(meta, ground) {
   return g;
 }
 
-// ---------------------------------------------------------------- catch tower
+// Tower
 function buildTower(meta, ground) {
   const p = meta.pad, spec = meta.rocket, L = spec.length, r = spec.radius;
   const apronR = meta.flat_radius ?? 12;
@@ -367,7 +367,7 @@ function buildTower(meta, ground) {
   const tower = new THREE.Group();
   tower.position.copy(base);
   tower.rotation.y = Math.atan2(-toPad.z, toPad.x);      // local +x points at the pad
-  // lattice: corner columns, rings and X-bracing on every face
+  // Lattice: corner columns, rings and X-bracing on every face
   const geos = [], h = w / 2, seg = w;
   const corners = [[h, h], [h, -h], [-h, -h], [-h, h]];
   for (const [x, z] of corners) geos.push(beam(V(x, 0, z), V(x, H, z), 0.42));
@@ -387,7 +387,7 @@ function buildTower(meta, ground) {
   footing.position.y = 0.3; footing.receiveShadow = true;
   tower.add(lattice, footing);
 
-  // carriage that rides the tower, carrying two independently pivoting arms
+  // Carriage: rides the tower, carrying two independently pivoting arms
   const carriage = new THREE.Group(); carriage.position.y = catchY;
   const sleeve = new THREE.Mesh(new THREE.BoxGeometry(w + 0.9, 2.4, w + 0.9), MAT.black);
   sleeve.castShadow = true; carriage.add(sleeve);
@@ -426,7 +426,7 @@ function armYaw(pivot, c, side, clear) {
   return -phi;
 }
 
-// ---------------------------------------------------------------- booster
+// Booster
 function buildRocket(spec) {
   const { length: L, radius: r, leg_radius: R, leg_drop: drop } = spec;
   const root = new THREE.Group();          // at COM, rotated by the quaternion
@@ -434,12 +434,12 @@ function buildRocket(spec) {
   root.add(body);
   const add = (geo, mat, parent = body) => { const m = new THREE.Mesh(geo, mat); m.castShadow = true; parent.add(m); return m; };
   const baseY = -L / 2, octa = 0.35, inter = Math.min(1.8, L * 0.14);
-  // tank, interstage (open top), engine section
+  // Body: tank, interstage (open top), engine section
   add(new THREE.CylinderGeometry(r, r, L - octa - inter, 32, 1, true).translate(0, baseY + octa + (L - octa - inter) / 2, 0), MAT.white);
   add(new THREE.CylinderGeometry(r * 1.005, r * 1.005, inter, 32, 1, true).translate(0, L / 2 - inter / 2, 0), MAT.black);
   add(new THREE.CircleGeometry(r, 32).rotateX(-Math.PI / 2).translate(0, L / 2 - inter * 0.7, 0), MAT.black);
   add(new THREE.CylinderGeometry(r * 0.99, r * 0.96, octa, 32).translate(0, baseY + octa / 2, 0), MAT.carbon);
-  // grid fins near the top, deployed
+  // Fins: grid fins near the top, deployed
   for (let k = 0; k < 4; k++) {
     const a = Math.PI / 4 + k * Math.PI / 2;
     const fin = add(new THREE.BoxGeometry(r * 0.8, 0.1, r * 0.95).translate(r + r * 0.42, 0, 0), MAT.fin);
@@ -447,7 +447,7 @@ function buildRocket(spec) {
     const mount = add(new THREE.BoxGeometry(0.25, 0.35, 0.3).translate(r + 0.08, 0, 0), MAT.metal);
     mount.rotation.y = a; mount.position.y = L / 2 - inter * 0.45;
   }
-  // nine-engine cluster; only the center engine gimbals and fires (a landing burn)
+  // Engines: nine-engine cluster; only the center engine gimbals and fires (a landing burn)
   const bellH = r * 0.42, bellR = r * 0.19;
   const bellGeo = new THREE.CylinderGeometry(bellR * 0.4, bellR, bellH, 18, 1, true).translate(0, -bellH / 2, 0);
   for (let k = 0; k < 8; k++) {
@@ -458,7 +458,7 @@ function buildRocket(spec) {
   const hotMat = MAT.metal.clone(); hotMat.emissive = new THREE.Color(0xff5a1a); hotMat.emissiveIntensity = 0;
   hotMat.side = THREE.DoubleSide;
   add(bellGeo, hotMat, gimbal);
-  // plume: expanding outer sheath, hot core, shock diamonds (atmosphere only)
+  // Plume: expanding outer sheath, hot core, shock diamonds (atmosphere only)
   const plume = new THREE.Group(); plume.position.y = -bellH; gimbal.add(plume);
   const sheath = new THREE.Mesh(new THREE.CylinderGeometry(bellR, bellR * 1.8, 1, 20, 1, true).translate(0, -0.5, 0), MAT.plume);
   const core = new THREE.Mesh(new THREE.ConeGeometry(bellR * 0.85, 1, 16, 1, true).rotateX(Math.PI).translate(0, -0.5, 0), MAT.core);
@@ -470,7 +470,7 @@ function buildRocket(spec) {
   for (const fx of [sheath, core, ...diamonds]) fx.userData.fx = true;   // effects keep their own materials when ghosted
   const light = new THREE.PointLight(0xffa040, 0, 70, 1.5); light.position.y = -r * 2; gimbal.add(light);
 
-  // landing legs: hinge at the base, stowed flush along the tank, swing down to the feet used by the physics
+  // Legs: hinge at the base, stowed flush along the tank, swing down to the feet used by the physics
   const hingeY = baseY + octa, hingeR = r + 0.1;
   const dx = R - hingeR, dy = (baseY - drop) - hingeY, legLen = Math.hypot(dx, dy), legAng = Math.atan2(dx, dy);
   const legs = [[1, 0], [-1, 0], [0, 1], [0, -1]].map(([ux, uz]) => {
@@ -493,7 +493,7 @@ function setLegs(m, deploy) {
   for (const leg of m.legs) {
     leg.hinge.rotation.z = -ang;
     leg.foot.rotation.z = ang;                                         // keep the foot level
-    // strut from the tank to 55% along the leg
+    // Strut: from the tank to 55% along the leg
     _b.set(Math.sin(ang), Math.cos(ang), 0).multiplyScalar(m.legLen * 0.55).add(leg.hinge.position);
     _a.copy(leg.anchor);
     const d = _b.clone().sub(_a), len = d.length();
@@ -558,7 +558,7 @@ function buildRing(color) {
   return m;
 }
 
-// ---------------------------------------------------------------- load
+// Load
 function load(replay, label) {
   if (world) { scene.remove(world.group); world.group.traverse(o => { o.geometry?.dispose?.(); }); }
   const body = replay.meta.body?.[0] ?? "earth";
@@ -576,7 +576,7 @@ function load(replay, label) {
   const terrain = buildTerrain(replay.terrain, style);
   const tower = buildTower(replay.meta, terrain.ground);
   group.add(terrain.mesh, buildPad(replay.meta, terrain.ground), tower.group);
-  // a far ground plane so the world doesn't end in a hard edge
+  // Horizon: a far ground plane so the world doesn't end in a hard edge
   const far = new THREE.Mesh(new THREE.CircleGeometry(3000, 32),
     new THREE.MeshStandardMaterial({ color: new THREE.Color(...style.low.map((v, i) => (v + style.high[i]) / 2)), roughness: 1 }));
   far.rotation.x = -Math.PI / 2; far.position.y = Math.min(...replay.terrain.heights.flat()) - 0.5;
@@ -589,7 +589,7 @@ function load(replay, label) {
     group.add(model.root, trail, burst.g, ring, dust.g);
     return { ...rk, model, trail, burst, ring, dust, tEnd: rk.end * replay.meta.dt };
   });
-  // the catch arms close around the first rocket that lands on the pad
+  // Arms: close around the first rocket that lands on the pad
   const pd = replay.meta.pad;
   const isCatch = replay.meta.task === "catch";
   const onPad = rockets.filter(r => r.outcome === "caught" ||
@@ -608,7 +608,7 @@ function load(replay, label) {
   world = { group, replay, rockets, duration, ground: terrain.ground, vacuum: body === "moon",
     catcher: { tower, focus, padLocal, onPadSet }, isCatch };
 
-  // camera: look at the pad from a distance that frames the start positions
+  // Camera: look at the pad from a distance that frames the start positions
   const p = replay.meta.pad;
   const spread = Math.max(...rockets.map(r => Math.hypot(r.frames[0][F.x] - p[0], r.frames[0][F.z] - p[2])), 60);
   const top = Math.max(...rockets.map(r => r.frames[0][F.y]));
@@ -629,7 +629,7 @@ function load(replay, label) {
   applyScale();
 }
 
-// camera presets: P frames the landing zone and tower, R moves in close on the selected rocket
+// Presets: P frames the landing zone and tower, R moves in close on the selected rocket
 let viewParam = params.get("view"), frameRocketNext = false;
 function framePad() {
   if (!world) return;
@@ -662,7 +662,7 @@ function applyScale() {
   world?.rockets.forEach(r => r.model.root.scale.setScalar(s));
 }
 
-// ---------------------------------------------------------------- per-frame update
+// Update
 const qa = new THREE.Quaternion(), qb = new THREE.Quaternion(), up = new THREE.Vector3();
 function sample(frames, ft) {
   const i = Math.min(Math.floor(ft), frames.length - 1), j = Math.min(i + 1, frames.length - 1), a = ft - i;
@@ -716,10 +716,10 @@ function update(dtReal) {
     }
     m.hotMat.emissiveIntensity = on ? 1.4 * s.thr : 0;
     m.light.intensity = on ? 60 * s.thr : 0;
-    // crashed boosters vanish into the fireball; ghosts clear off the pad once their flight is over
+    // Visibility: crashed boosters vanish into the fireball; ghosts clear off the pad once their flight is over
     m.root.visible = !(crashed && t > r.tEnd + 0.15) && !(m.ghost && t > r.tEnd + 1.0);
 
-    // ground dust kicked up by the plume, and settling after touchdown
+    // Dust: kicked up by the plume, and settling after touchdown
     const since0 = t - r.tEnd;
     let k = on && clear < 25 ? s.thr * (1 - Math.max(clear, 0) / 25) : 0;
     if (ended && !crashed && since0 < 2.5) k = Math.max(k, 0.5 * (1 - since0 / 2.5));
@@ -739,7 +739,7 @@ function update(dtReal) {
     r.trail.geometry.setDrawRange(0, Math.max(Math.floor(ft) + 1, 1));
     r.trail.material.opacity = idx === selected ? 0.95 : 0.45;
 
-    // end-of-episode effects
+    // Effects: end of episode
     const since = t - r.tEnd;
     r.burst.g.visible = crashed && since < 3;
     if (r.burst.g.visible) {
@@ -759,7 +759,7 @@ function update(dtReal) {
     }
   });
 
-  // catch arms: open while waiting, close around the focus rocket after it lands
+  // Arms: open while waiting, close around the focus rocket after it lands
   const cat = world.catcher;
   if (cat) {
     const sel = world.rockets[selected];
@@ -775,7 +775,7 @@ function update(dtReal) {
   }
 
   if (frameRocketNext) { frameRocketNext = false; frameRocket(); }
-  // follow camera: move the orbit target with the selected rocket, keeping the user's view offset
+  // Follow: move the orbit target with the selected rocket, keeping the user's view offset
   const sel = world.rockets[selected];
   if (sel && document.getElementById("follow").checked) {
     const p = sel.model.root.position;
@@ -821,7 +821,7 @@ function renderHud(r) {
     + row("episode return", r.return.toFixed(1));
 }
 
-// ---------------------------------------------------------------- manifest / training view
+// Manifest: polls training snapshots
 let manifest = [], current = null;
 async function fetchJSON(url) { const r = await fetch(url, { cache: "no-store" }); if (!r.ok) throw new Error(r.status); return r.json(); }
 
@@ -856,7 +856,7 @@ function onReplayEnd() {
     }, 800);
     return;
   }
-  // after a replay finishes, hop to a newer training snapshot if one arrived
+  // Advance: after a replay finishes, hop to a newer training snapshot if one arrived
   const n = newest();
   if (document.getElementById("live").checked && n && n.file !== current) setTimeout(() => openEntry(n), 1200);
 }
@@ -883,7 +883,7 @@ function drawCurve() {
 }
 function showEmpty(v) { document.getElementById("empty").style.display = v && !serverMode ? "grid" : "none"; }
 
-// ---------------------------------------------------------------- launch control (play.py)
+// Launch: needs play.py
 const SLIDERS = [
   ["altitude", "Altitude", v => `${v.toFixed(0)} m`, 1, 180],
   ["descent", "Descent", v => `${v.toFixed(0)} m/s`, 1, 15],
@@ -1024,7 +1024,7 @@ function drawLaunchCurve() {
   const X = i => pad + (W - 2 * pad) * (n === 1 ? 0.5 : i / (n - 1));
   const Y = f => H - pad - (H - 2 * pad) * f;
   const Yr = v => Y(hi === lo ? 0.5 : (v - lo) / (hi - lo));
-  // rolling landed rate over the last 10 launches
+  // Trend: rolling landed rate over the last 10 launches
   const rate = pts.map((_, i) => { const w = pts.slice(Math.max(0, i - 9), i + 1); return w.filter(e => e.outcome === "landed" || e.outcome === "caught").length / w.length; });
   const dot = e => e.outcome === "landed" || e.outcome === "caught" ? "#3fd18b" : (colorFor(e.outcome) === 0xff5d5d ? "#ff5d5d" : "#9aa6b8");
   svg.innerHTML =
@@ -1037,7 +1037,7 @@ function drawLaunchCurve() {
   svg.querySelectorAll(".pt").forEach(c => c.onclick = () => openEntry(manifest.find(e => e.file === c.dataset.f)));
 }
 
-// ---------------------------------------------------------------- controls
+// Controls
 const setPlayIcon = () => document.getElementById("play").textContent = playing ? "❚❚" : "▶";
 document.getElementById("play").onclick = () => {
   if (world && t >= world.duration) t = 0;
@@ -1064,7 +1064,7 @@ addEventListener("keydown", e => {
   if (e.key === "ArrowLeft") { selected = (selected - 1 + world.rockets.length) % world.rockets.length; renderRocketList(); }
 });
 
-// ---------------------------------------------------------------- orbital mission (mission.js, needs play.py)
+// Mission: mission.js, needs play.py
 let renderHook = null, openMissionCb = null;
 const viewerAPI = {
   renderer, buildRocket, setLegs, MAT, fetchJSON,

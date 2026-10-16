@@ -50,7 +50,7 @@ class VecRocketEnv:
     observation_dim = OBS_DIM
     action_dim = ACT_DIM
 
-    # ------------------------------------------------------------------ reset
+    # Reset
     def reset(self, seed: int | None = None) -> np.ndarray:
         if seed is not None:
             self.rng = np.random.default_rng(seed)
@@ -64,6 +64,7 @@ class VecRocketEnv:
             return
         rng, sim, rk = self.rng, self.cfg.sim, self.rocket
 
+        # Body
         names = rng.choice(sim.bodies, size=m)
         for i, name in zip(idx, names):
             b = BODIES[name]
@@ -72,11 +73,14 @@ class VecRocketEnv:
             gust = b.wind_gust if sim.wind_gust is None else sim.wind_gust
             self.wind[i] = np.asarray(wind) + rng.normal(0, gust, 3) * np.array([1, 0.2, 1])
 
+        # Terrain
         self.terrain.regenerate(idx, rng)
         pad = self.terrain.pad[idx]
         cc = self.cfg.catch
         self.tower_xz[idx] = pad[:, [0, 2]] + cc.tower_distance * np.asarray(cc.tower_direction)
         self.tower_base[idx] = self.terrain.height_at(self.tower_xz[idx][:, None, :], idx)[:, 0]
+
+        # Start
         half = self.cfg.terrain.world_size / 2 - 20.0
         xz = np.clip(pad[:, [0, 2]] + rng.uniform(-sim.start_offset, sim.start_offset, (m, 2)), -half, half)
         ground = self.terrain.height_at(xz[:, None, :], idx)[:, 0]
@@ -86,7 +90,7 @@ class VecRocketEnv:
                                 rng.uniform(*sim.start_vvel, m),
                                 rng.uniform(-sim.start_hvel, sim.start_hvel, m)], -1)
 
-        # Random tilt about a horizontal axis, composed with a random roll about body y.
+        # Attitude: random tilt about a horizontal axis, composed with a random roll about body y
         az = rng.uniform(0, 2 * np.pi, m)
         tilt_axis = np.stack([np.cos(az), np.zeros(m), np.sin(az)], -1)
         q_tilt = quat_from_axis_angle(tilt_axis, rng.uniform(0, sim.start_tilt, m))
@@ -97,6 +101,7 @@ class VecRocketEnv:
         rk.throttle[idx] = 0.0
         rk.gimbal[idx] = 0.0
 
+        # Episode
         self.time[idx] = 0.0
         self.done[idx] = False
         self.reason[idx] = R["running"]
@@ -105,7 +110,7 @@ class VecRocketEnv:
         self.catch_timer[idx] = 0.0
         self.potential[idx] = self._potential()[idx]
 
-    # ------------------------------------------------------------------ helpers
+    # Helpers
     def _foot_clearance(self):
         """Height of the leg plane above the ground directly below the COM, (N,)."""
         rk = self.rocket
@@ -113,7 +118,7 @@ class VecRocketEnv:
         foot_below_com = self.cfg.rocket.length / 2 + self.cfg.rocket.leg_drop + rk.derived()["com_y"]
         return rk.pos[:, 1] - foot_below_com - ground
 
-    # catch task geometry
+    # Catch
     def catch_target(self):
         """World position (N,3) where the booster's catch point sits when held by the arms."""
         cc, L = self.cfg.catch, self.cfg.rocket.length
@@ -143,17 +148,18 @@ class VecRocketEnv:
         e = self.catch_point() - self.catch_target()
         return np.linalg.norm(e[:, [0, 2]], axis=-1), e[:, 1]
 
+    # Observation
     def _potential(self):
         rk = self.rocket
         if self.cfg.task == "catch":
             h, dy = self._catch_error()
             speed = np.linalg.norm(rk.vel, axis=-1)
-            # Horizontal precision matters most: the arms leave only catch_radius of slack.
+            # Horizontal precision matters most: the arms leave only catch_radius of slack
             return -(h / 30.0 + np.abs(dy) / 20.0 + speed / 30.0 + tilt_angle(rk.quat))
         hdist = np.linalg.norm(rk.pos[:, [0, 2]] - self.terrain.pad[:, [0, 2]], axis=-1)
         clear = np.maximum(self._foot_clearance(), 0.0)
         speed = np.linalg.norm(rk.vel, axis=-1)
-        # Clearance gets its own, stronger term so hovering above the pad isn't nearly as good as landing.
+        # Clearance gets its own, stronger term so hovering above the pad isn't nearly as good as landing
         return -(hdist / 100.0 + clear / 20.0 + speed / 30.0 + tilt_angle(rk.quat))
 
     def observe(self) -> np.ndarray:
@@ -188,13 +194,13 @@ class VecRocketEnv:
         ], axis=-1)
         return np.clip(obs, -10.0, 10.0).astype(np.float32)
 
-    # ------------------------------------------------------------------ contact
+    # Contact
     def _check_contact(self, alive: np.ndarray):
         """Detect ground contact for alive envs. Returns (contact, landed, soft) bool arrays (N,)."""
         rk, c = self.rocket, self.cfg.criteria
         none = np.zeros(self.n, bool)
         if self.cfg.task == "catch":
-            # Legs stay stowed for a catch: any ground contact is a crash.
+            # Legs stay stowed for a catch: any ground contact is a crash
             body = rk.world_points(rk.body_points)
             contact = np.any(body[..., 1] <= self.terrain.height_at(body[..., [0, 2]]), axis=1) & alive
             self.reason = np.where(contact, R["body_contact"], self.reason)
@@ -220,7 +226,7 @@ class VecRocketEnv:
         slope = np.arccos(np.clip(normal[:, 1], -1, 1))
         leg_diff = leg_ground.max(1) - leg_ground.min(1)
 
-        # Ordered checks; the first failure is the reported reason.
+        # Criteria: ordered checks, the first failure is the reported reason
         checks = [
             (body_hit, "body_contact"),
             (np.abs(v_n) > c.max_vspeed, "crash_vspeed"),
@@ -235,7 +241,7 @@ class VecRocketEnv:
         for fail, name in reversed(checks):
             reason = np.where(fail, R[name], reason)
         landed = contact & (reason == R["landed"])
-        # Soft touchdown that only failed on placement (off pad / slope / uneven ground).
+        # Soft touchdown that only failed on placement (off pad / slope / uneven ground)
         soft = contact & np.isin(reason, [R["off_pad"], R["steep_slope"], R["uneven_legs"]])
         self.reason = np.where(contact, reason, self.reason)
         self._landing_slope = slope
@@ -258,11 +264,12 @@ class VecRocketEnv:
         self.reason[caught] = R["caught"]
         return caught, crashed
 
-    # ------------------------------------------------------------------ step
+    # Step
     def step(self, actions: np.ndarray):
         """actions: (N, 4) in [-1, 1]. Returns obs, reward, terminated, truncated, info."""
         cfg, rk = self.cfg, self.rocket
         rw, sim, crit = cfg.reward, cfg.sim, cfg.criteria
+        # Actions
         a = np.clip(np.asarray(actions, dtype=float).reshape(self.n, ACT_DIM), -1.0, 1.0)
         target_thr = (a[:, 0] + 1.0) / 2.0
         target_gimbal = a[:, 1:3] * cfg.rocket.max_gimbal
@@ -276,6 +283,7 @@ class VecRocketEnv:
         landed_any = np.zeros(self.n, bool)
         impact_speed = np.zeros(self.n)
 
+        # Physics
         for _ in range(sim.substeps):
             burned += rk.step(sim.dt, target_thr, target_gimbal, roll, self.gravity, self.density,
                               self.isp_scale, self.wind, active=alive)
@@ -302,7 +310,7 @@ class VecRocketEnv:
                 terminated |= landed | crashed
                 alive &= ~(landed | crashed)
 
-        # Mid-flight terminations.
+        # Flight: mid-air terminations
         tilt = tilt_angle(rk.quat)
         half = cfg.terrain.world_size / 2
         oob = (np.abs(rk.pos[:, 0]) > half) | (np.abs(rk.pos[:, 2]) > half) | (rk.pos[:, 1] > sim.world_height)
@@ -316,15 +324,15 @@ class VecRocketEnv:
             terminated |= hit
             alive &= ~hit
 
-        # The time limit is part of the task (hovering forever is a failure), so it terminates
-        # with a penalty rather than truncating.
+        # Timeout: part of the task (hovering forever is a failure), so it terminates
+        # with a penalty rather than truncating
         timeout = alive & (self.time >= sim.max_time - 1e-9)
         self.reason[timeout] = R["timeout"]
         reward -= rw.timeout_penalty * timeout
         terminated |= timeout
         truncated = np.zeros(self.n, bool)
 
-        # Per-step penalties and potential-based shaping.
+        # Reward: per-step penalties and potential-based shaping
         step_dt = self.decision_dt
         target = self.catch_target() if cfg.task == "catch" else self.terrain.pad
         dist = np.linalg.norm(rk.pos - target, axis=-1)
@@ -337,6 +345,7 @@ class VecRocketEnv:
         self.potential = new_pot
         reward += (shaping - per_step) * start_alive
 
+        # Bookkeeping
         self.ep_return += reward
         self.ep_len += start_alive
         done_now = (terminated | truncated) & start_alive

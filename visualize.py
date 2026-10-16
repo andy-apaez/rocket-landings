@@ -38,6 +38,7 @@ def main():
     p.add_argument("--out", default="landing.png")
     args = p.parse_args()
 
+    # Pilot
     cfg = EnvConfig()
     cfg.sim.bodies = (args.body,)
     env = VecRocketEnv(cfg, num_envs=1, seed=args.seed, autoreset=False)
@@ -53,6 +54,7 @@ def main():
     log = record(env, policy)
     outcome = REASONS[env.reason[0]]
 
+    # Trajectory
     fig = plt.figure(figsize=(14, 7))
     ax = fig.add_subplot(1, 2, 1, projection="3d")
     t = env.terrain
@@ -78,6 +80,7 @@ def main():
     ax.set_title(f"{name} on {args.body}: {outcome}")
     ax.legend(loc="upper left")
 
+    # Telemetry
     series = [("clear", "leg clearance (m)"), ("speed", "speed (m/s)"), ("tilt", "tilt (°)"),
               ("throttle", "throttle"), ("fuel", "fuel fraction")]
     for i, (key, label) in enumerate(series):

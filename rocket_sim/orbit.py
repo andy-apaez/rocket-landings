@@ -87,7 +87,7 @@ DESCENT_FIELDS = ["t", "lat", "lon", "alt", "speed", "fpa", "q", "accel_g", "hea
 DESCENT_PHASES = ["coast", "entry", "braking"]
 
 
-# ---------------------------------------------------------------------- vectors / frames
+# Frames
 def _cross(a, b):
     return np.array([a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]])
 
@@ -117,7 +117,7 @@ def eci_to_lat_lon(r, t, planet: Planet = EARTH):
     return lat, (lon + 180.0) % 360.0 - 180.0
 
 
-# ---------------------------------------------------------------------- Kepler orbits
+# Kepler
 def elements(r, v, t, planet: Planet = EARTH) -> dict:
     """Classical elements of the orbit through state (r, v) at time t, as a JSON-ready dict."""
     mu, R = planet.mu, planet.radius
@@ -158,7 +158,7 @@ def propagate(orbit: dict, t):
     return r, v
 
 
-# ---------------------------------------------------------------------- ascent
+# Ascent
 def ascent(lat: float, lon: float, altitude: float = 300e3, inclination: float | None = None,
            vehicle: LaunchVehicle | None = None, planet: Planet = EARTH, dt: float = 0.2,
            max_time: float = 1500.0) -> dict:
@@ -214,7 +214,7 @@ def ascent(lat: float, lon: float, altitude: float = 300e3, inclination: float |
         st = stages[k]
         burning = phase not in ("coast", "orbit") and prop[k] > 0
 
-        # throttle: the booster rides the max-Q bucket, the orbital stage runs flat out
+        # Throttle: the booster rides the max-Q bucket, the orbital stage runs flat out
         thr = 0.0
         if burning:
             thr = 1.0 if k > 0 else float(np.clip(1.0 - (q - 0.85 * veh.max_q) / (0.5 * veh.max_q),
@@ -223,7 +223,7 @@ def ascent(lat: float, lon: float, altitude: float = 300e3, inclination: float |
         thrust = thr * (st.thrust_vac - (st.thrust_vac - st.thrust_sl) * pr)
         isp = st.isp_vac - (st.isp_vac - st.isp_sl) * pr
 
-        # steering
+        # Steering
         if phase == "vertical":
             d = rh
             if vrel >= veh.kick_speed:
@@ -249,7 +249,7 @@ def ascent(lat: float, lon: float, altitude: float = 300e3, inclination: float |
         if phase in ("coast", "orbit"):
             d = rh
 
-        # forces
+        # Forces
         acc = -mu / rn ** 3 * r
         if vrel > 1e-6:
             acc = acc - (0.5 * rho * veh.cd * area * vrel / m) * v_rel
@@ -257,13 +257,14 @@ def ascent(lat: float, lon: float, altitude: float = 300e3, inclination: float |
             acc = acc + (thrust / m) * d
         accel_g = math.sqrt(float((acc + mu / rn ** 3 * r) @ (acc + mu / rn ** 3 * r))) / G0
 
+        # Record
         if t >= next_frame - 1e-9:
             frames.append(_ascent_frame(t, r, v, v_rel, rh, e_h, q, accel_g, m, thr, k, r0_hat, R, d, P))
             next_frame += 1.0
         if q > q_peak[0]:
             q_peak = (q, t)
 
-        # integrate (semi-implicit Euler), with fine steps close to each cutoff
+        # Integrate: semi-implicit Euler, with fine steps close to each cutoff
         step = dt
         apo, peri = _apsides(r, v, mu) if phase == "insertion" else (0.0, 0.0)
         if (phase == "insertion" and apo > target_r - 40e3 and peri > insert_r - 80e3) or phase == "circularize":
@@ -274,7 +275,7 @@ def ascent(lat: float, lon: float, altitude: float = 300e3, inclination: float |
             prop[k] = max(prop[k] - thrust / (isp * G0) * step, 0.0)
         t += step
 
-        # staging and cutoff
+        # Staging
         if phase in ("kick", "turn") and prop[k] <= 0:
             events.append({"name": "meco", "t": t})
             events.append({"name": "stage_sep", "t": t + 1.0})
@@ -308,6 +309,7 @@ def ascent(lat: float, lon: float, altitude: float = 300e3, inclination: float |
         if h < -1.0 or t - coast_time > max_time:
             raise RuntimeError(f"ascent failed in phase {phase} at t={t:.0f}s, h={h / 1e3:.1f} km")
 
+    # Orbit
     events.append({"name": "max_q", "t": q_peak[1]})
     events.sort(key=lambda e: e["t"])
     rh = r / math.sqrt(r @ r)
@@ -316,7 +318,7 @@ def ascent(lat: float, lon: float, altitude: float = 300e3, inclination: float |
     orbit = elements(r, v, t, P)
     if orbit["periapsis"] < 120e3:
         raise RuntimeError(f"orbit periapsis too low ({orbit['periapsis'] / 1e3:.0f} km)")
-    # what the orbital stage has left, with the lander still attached, is the deorbit budget
+    # Budget: what the orbital stage has left, with the lander still attached, is the deorbit Δv
     st = stages[-1]
     m_end = mass()
     budget = st.isp_vac * G0 * math.log(m_end / (m_end - prop[-1])) if prop[-1] > 0 else 0.0
@@ -372,7 +374,7 @@ def vehicle_stats(veh: LaunchVehicle) -> dict:
                        "max_gimbal": p.max_gimbal}}
 
 
-# ---------------------------------------------------------------------- descent
+# Descent
 def descent_profile(r0: float, spec: RocketSpec | None = None, planet: Planet = EARTH, perigee_alt: float = 30e3,
                     gate_alt: float = 230.0, gate_speed: float = 15.0, ignite: float = 0.4) -> dict:
     """Planar deorbit, coast, ballistic entry and braking burn from a circular orbit of radius r0.
@@ -407,7 +409,7 @@ def descent_profile(r0: float, spec: RocketSpec | None = None, planet: Planet = 
         if phase == 0 and h < 120e3:
             phase = 1
             events.append({"name": "entry_interface", "t": t})
-        # braking burn: deceleration needed to hit the gate (mostly vertical fall) beyond what drag gives
+        # Braking: deceleration needed to hit the gate (mostly vertical fall) beyond what drag gives
         thrust = 0.0
         if phase >= 1 and h < 20e3 and fuel > 0:
             a_req = (sp * sp - gate_speed ** 2) / (2 * max(h - gate_alt, 1.0)) + g - a_drag
@@ -418,9 +420,10 @@ def descent_profile(r0: float, spec: RocketSpec | None = None, planet: Planet = 
             if burning:
                 thrust = s.t_max * float(np.clip(m * a_req / s.t_max, s.min_throttle, 1.0))
         a_thr = thrust / m
-        # accelerations along -velocity (drag and retro thrust)
+        # drag and retro thrust both act along -velocity
         ar = -(a_drag + a_thr) * vr / max(sp, 1e-9)
         at = -(a_drag + a_thr) * vt / max(sp, 1e-9)
+        # Record
         if t >= next_rec - 1e-9:
             for k, val in zip(out, (t, th, h, sp, math.degrees(math.atan2(vr, vt)), q, (a_drag + a_thr) / G0,
                                     heat, fuel / s.fuel_capacity, phase)):
@@ -436,7 +439,7 @@ def descent_profile(r0: float, spec: RocketSpec | None = None, planet: Planet = 
             raise RuntimeError("descent hit the ground before reaching the gate")
 
         dt = 2.0 if phase == 0 else 0.25 if h > 5e3 else 0.02
-        # polar equations of motion, semi-implicit
+        # Integrate: polar equations of motion, semi-implicit
         vr += (vt * vt / r - g + ar) * dt
         vt += (-vr * vt / r + at) * dt
         r += vr * dt
@@ -517,6 +520,7 @@ def plan_landing(orbit: dict, lat: float, lon: float, t_now: float, budget_dv: f
         return {"t_burn": float(t), "dv": dv, "plane_change": plane, "cross_track": cross_track,
                 "r": r, "n_new": n_new}
 
+    # Search
     ts = t_now + earliest + np.arange(0.0, horizon, 20.0)
     f = miss(ts)
     # the site comes into the right downrange slot when the miss angle passes from + to - (smoothly)
@@ -538,6 +542,7 @@ def plan_landing(orbit: dict, lat: float, lon: float, t_now: float, budget_dv: f
             break
     if best is None:
         raise RuntimeError("no deorbit opportunity found")
+    # Plan
     reachable = best["dv"] <= budget_dv
     plan = {
         "lat": lat, "lon": lon, "reachable": reachable,
@@ -567,7 +572,7 @@ def _descent_track(prof, t_burn, rh, n_new, planet, max_points=500):
     return np.round(np.stack(cols, -1), 4).tolist()
 
 
-# ---------------------------------------------------------------------- landing site
+# Site
 # Mean surface wind by |latitude|: trade easterlies, mid-latitude westerlies, polar easterlies (m/s).
 _WIND_LAT = [0, 15, 30, 45, 60, 75, 90]
 _WIND_EAST = [-3.0, -4.5, 0.0, 5.5, 3.0, -2.5, -1.0]

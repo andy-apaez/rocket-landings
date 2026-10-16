@@ -27,7 +27,7 @@ const WARPS = [1, 10, 60, 300, 1000];
 const COUNTDOWN = 10;         // s of countdown before liftoff
 const VIGNETTE = 17;          // s after liftoff shown from the pad camera
 
-// ---------------------------------------------------------------- small helpers
+// Helpers
 const $ = id => document.getElementById(id);
 const clamp = (v, a, b) => Math.min(Math.max(v, a), b);
 const wrap180 = d => ((d + 540) % 360) - 180;
@@ -47,7 +47,7 @@ const fmtLat = v => `${Math.abs(v).toFixed(3)}° ${v >= 0 ? "N" : "S"}`;
 const fmtLon = v => `${Math.abs(v).toFixed(3)}° ${v >= 0 ? "E" : "W"}`;
 const fmtWind = w => {
   const sp = Math.hypot(w[0], w[2]);
-  // landing-world axes: +x east, +z south; wind direction is reported as where it blows from
+  // Wind: landing-world axes are +x east, +z south; direction is reported as where it blows from
   const from = (Math.atan2(-w[0], w[2]) / DEG + 360) % 360;
   const names = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
   return `${sp.toFixed(1)} m/s from ${names[Math.round(from / 45) % 8]}`;
@@ -106,7 +106,7 @@ const glowTex = canvasTex(128, 128, (x, w) => {
 let seed = 11;
 const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
 
-// ---------------------------------------------------------------- Earth imagery (also sampled for site picking)
+// Imagery: also sampled for site picking
 const maps = {};   // name -> { tex, data, w, h }
 function loadMap(name, file, srgb) {
   return new Promise(res => {
@@ -158,7 +158,7 @@ function classify(lat, lon) {
   return { surface, ruggedness: rug, color };
 }
 
-// ---------------------------------------------------------------- globe scene
+// Globe
 function buildGlobe() {
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x020408);
@@ -195,7 +195,7 @@ function buildGlobe() {
   const clouds = new THREE.Mesh(new THREE.SphereGeometry(1.006, 96, 48),
     new THREE.MeshLambertMaterial({ transparent: true, opacity: 0.0, depthWrite: false }));
   earth.add(clouds);
-  // atmosphere: back faces of a slightly larger sphere, glowing at the limb
+  // Atmosphere: back faces of a slightly larger sphere, glowing at the limb
   const atmo = new THREE.Mesh(new THREE.SphereGeometry(1.035, 64, 32), new THREE.ShaderMaterial({
     uniforms: { sunDir: { value: sunDir } },
     vertexShader: `varying vec3 vN; varying vec3 vW; void main() { vN = normalize(mat3(modelMatrix) * normal);
@@ -217,7 +217,7 @@ function buildGlobe() {
     if (c) { clouds.material.map = c.tex; clouds.material.opacity = 0.45; clouds.material.needsUpdate = true; }
   });
 
-  // stars
+  // Stars
   const sp = new Float32Array(4000 * 3), sc = new Float32Array(4000 * 3);
   seed = 5;
   for (let i = 0; i < 4000; i++) {
@@ -307,7 +307,7 @@ function glowSprite(color, size) {
   return s;
 }
 
-// ---------------------------------------------------------------- hologram
+// Hologram
 function buildHolo(api, lander) {
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(32, 1, 0.5, 200);
@@ -341,7 +341,7 @@ function buildHolo(api, lander) {
     m.add(new THREE.LineSegments(new THREE.EdgesGeometry(m.geometry, 28), edgeMat));
   }
   scene.add(model.root);
-  // projector pedestal
+  // Pedestal
   const baseY = -lander.length / 2 - (lander.leg_drop ?? 1) - 0.3;
   const ringMat = new THREE.MeshBasicMaterial({ color: 0x5ee6ff, transparent: true, opacity: 0.55, side: THREE.DoubleSide,
     blending: THREE.AdditiveBlending, depthWrite: false });
@@ -367,7 +367,7 @@ function buildHolo(api, lander) {
   };
 }
 
-// ---------------------------------------------------------------- lift-off vignette (cinematic pad cameras)
+// Vignette: cinematic pad cameras at liftoff
 // A photoreal pad at golden hour: physical sky with image-based light and sun shadows, a Falcon-class stack (sooted
 // booster, nine engines, stowed legs and grid fins), LOX venting, deluge, steam and a bloom + film-grain camera
 // pipeline. During the count the view cuts between close shots of the vehicle; after liftoff a long-lens tracker.
@@ -379,7 +379,7 @@ function beam(a, b, th) {
   g.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(Y, d.normalize()));
   return g.translate((a.x + b.x) / 2, (a.y + b.y) / 2, (a.z + b.z) / 2);
 }
-// square lattice tower (legs, rings, alternating X-bracing), optionally with a deck every `decks` levels
+// Tower: square lattice (legs, rings, alternating X-bracing), optionally with a deck every `decks` levels
 function lattice(H, w, step, leg, brace, decks = 0) {
   const h = w / 2, geos = [], cs = [[h, h], [h, -h], [-h, -h], [-h, h]];
   for (const [x, z] of cs) geos.push(beam(V3(x, 0, z), V3(x, H, z), leg));
@@ -425,14 +425,14 @@ const LensShader = {   // after tone mapping: chromatic fringe, vignette, film g
     }`,
 };
 
-// the stack: origin at the base of the booster's engine section, +y up
+// Stack: origin at the base of the booster's engine section, +y up
 function buildStack(anis) {
   const root = new THREE.Group(), R1 = 1.83, segs = 72;
   const add = (geo, mat, parent = root) => { const m = new THREE.Mesh(geo, mat); m.castShadow = m.receiveShadow = true; parent.add(m); return m; };
   const tex = (w, h, draw) => { const t = canvasTex(w, h, draw); t.anisotropy = anis; return t; };
   const welds = (x, w, h, n, a = 0.32) => { x.fillStyle = `rgba(110,110,104,${a})`; for (let i = 1; i < n; i++) x.fillRect(0, h * i / n, w, 3); };
 
-  // booster tank: white paint under a reflown booster's soot, heaviest at the base and streaked upward
+  // Tank: white paint under a reflown booster's soot, heaviest at the base and streaked upward
   const boosterMap = tex(1024, 4096, (x, w, h) => {
     x.fillStyle = "#ecebe6"; x.fillRect(0, 0, w, h);
     for (let i = 0; i < 13; i++) { x.fillStyle = `rgba(0,0,0,${0.01 + rnd() * 0.025})`; x.fillRect(0, h * i / 13, w, h / 13); }
@@ -453,7 +453,7 @@ function buildStack(anis) {
   });
   const paint = map => new THREE.MeshStandardMaterial({ map, roughness: 0.42, metalness: 0.02 });
   add(new THREE.CylinderGeometry(R1, R1, 39.5, segs, 1, true).translate(0, 1 + 39.5 / 2, 0), paint(boosterMap));
-  // interstage (carbon composite), second stage, adapter, fairing
+  // Upper: interstage (carbon composite), second stage, adapter, fairing
   const carbon = new THREE.MeshStandardMaterial({ color: 0x17181a, roughness: 0.55, metalness: 0.15,
     map: tex(512, 512, (x, w) => { x.fillStyle = "#fff"; x.fillRect(0, 0, w, w);
       for (let i = 0; i < 9000; i++) { const g = 200 + rnd() * 55 | 0; x.fillStyle = `rgb(${g},${g},${g})`; x.fillRect(rnd() * w, rnd() * w, 2, 2); } }) });
@@ -475,10 +475,10 @@ function buildStack(anis) {
     x.fillStyle = "rgba(110,110,104,.3)"; x.fillRect(0, h * (1 - 1 / 21), w, 3);
   });
   add(new THREE.LatheGeometry(fairPts, segs).translate(0, 59.3, 0), paint(fairMap));
-  // engine section and heat shield
+  // Base: engine section and heat shield
   const dark = new THREE.MeshStandardMaterial({ color: 0x2c2d2f, roughness: 0.65, metalness: 0.5 });
   add(new THREE.CylinderGeometry(R1, R1 * 0.985, 1, segs).translate(0, 0.5, 0), dark);
-  // raceway along the tower side, stowed carbon legs, folded grid fins
+  // Hardware: raceway along the tower side, stowed carbon legs, folded grid fins
   add(new THREE.BoxGeometry(0.34, 38.5, 0.18).translate(0, 1.6 + 38.5 / 2, R1 + 0.06).rotateY(-Math.PI / 2), white);
   const legShape = new THREE.Shape([new THREE.Vector2(-0.4, 0), new THREE.Vector2(0.4, 0), new THREE.Vector2(0.22, 9.6), new THREE.Vector2(-0.22, 9.6)]);
   const legGeo = new THREE.ExtrudeGeometry(legShape, { depth: 0.26, bevelEnabled: false }).translate(0, 0.35, R1);
@@ -501,7 +501,7 @@ function buildStack(anis) {
     add(new THREE.PlaneGeometry(1.25, 1.5).translate(0, 45.4, R1 + 0.2).rotateY(a), finMat);
     add(new THREE.BoxGeometry(0.5, 0.35, 0.3).translate(0, 44.5, R1 + 0.12).rotateY(a), dark);
   }
-  // nine sea-level engines; their nozzles glow when firing
+  // Engines: nine sea-level engines; their nozzles glow when firing
   const bellPts = [[0.46, -1.08], [0.43, -0.9], [0.36, -0.62], [0.27, -0.38], [0.18, -0.24], [0.2, -0.12], [0.27, -0.04], [0.27, 0]]
     .map(([r, y]) => new THREE.Vector2(r, y));
   const bellGeo = new THREE.LatheGeometry(bellPts, 36);
@@ -511,7 +511,7 @@ function buildStack(anis) {
   for (let k = 0; k < 8; k++) enginePos.push([1.22 * Math.sin(k * Math.PI / 4), 1.22 * Math.cos(k * Math.PI / 4)]);
   for (const [x, z] of enginePos) add(bellGeo, engineMat).position.set(x, 0, z);
 
-  // plume: nine jets merging into one sea-level column, a hot core, and the light they throw
+  // Plume: nine jets merging into one sea-level column, a hot core, and the light they throw
   const flame = new THREE.Group(); flame.position.y = -1.08; root.add(flame);
   const plumeMat = (core, edge, gain, soft, seed) => new THREE.ShaderMaterial({
     uniforms: { uTime: { value: 0 }, uThr: { value: 0 }, uLen: { value: 1 }, uGreen: { value: 0 }, uGain: { value: gain },
@@ -528,7 +528,7 @@ function buildStack(anis) {
   return { root, flame, outer, core, jets, engineMat, fireLight };
 }
 
-// soft, top-lit cumulus puffs (a few variants so the cloud doesn't tile)
+// Clouds: soft, top-lit cumulus puffs (a few variants so the cloud doesn't tile)
 function puffTex() {
   return canvasTex(256, 256, (x, w) => {
     for (let i = 0; i < 16; i++) {
@@ -558,7 +558,7 @@ function buildPad(api) {
   const repeatTex = (t, n, srgb = true) => { t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(n, n); t.anisotropy = anis;
     if (srgb) t.colorSpace = THREE.SRGBColorSpace; return t; };
 
-  // sky, low morning sun over the ocean, image-based light from the same sky
+  // Sky: low morning sun over the ocean, image-based light from the same sky
   const sunDir = new THREE.Vector3().setFromSphericalCoords(1, (90 - 19) * DEG, 58 * DEG);
   const sky = new Sky(); sky.scale.setScalar(30000);
   const su = sky.material.uniforms;
@@ -576,7 +576,7 @@ function buildPad(api) {
   sun.shadow.mapSize.set(4096, 4096); sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.05;
   scene.add(sun, sun.target, new THREE.HemisphereLight(0xbcd2ff, 0x5a5040, 0.25));
 
-  // land, beach, sea
+  // Ground: land, beach, sea
   const loader = new THREE.TextureLoader();
   const grass = repeatTex(loader.load(TEXROOT + "terrain/grasslight-big.jpg"), 900);
   const scrub = std(0x7c7656, 1, 0, { map: grass });
@@ -585,7 +585,7 @@ function buildPad(api) {
   const waterN = repeatTex(loader.load(TEXROOT + "waternormals.jpg"), 260, false);
   mesh(new THREE.PlaneGeometry(30000, 30000).rotateX(-Math.PI / 2).translate(1790 + 15000, GROUND - 0.4, 0),
     std(0x0c2533, 0.1, 0, { normalMap: waterN, normalScale: new THREE.Vector2(0.4, 0.4) }), false);
-  // bushes and palmetto scrub
+  // Scrub: bushes and palmetto
   const bush = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 2), std(0x2c3520, 1), 5200);
   const dummy = new THREE.Object3D();
   for (let i = 0; i < bush.count; i++) {
@@ -601,7 +601,7 @@ function buildPad(api) {
   mesh(new THREE.PlaneGeometry(2600, 9).rotateX(-Math.PI / 2).translate(-150 - 1300, GROUND + 0.04, 0), asphalt, false);
   mesh(new THREE.PlaneGeometry(9, 2600).rotateX(-Math.PI / 2).translate(-4, GROUND + 0.04, 150 + 1300), asphalt, false);
 
-  // pad deck: jointed, stained concrete on its berm, scorched around the mount, flame trench running +z
+  // Deck: jointed, stained concrete on its berm, scorched around the mount, flame trench running +z
   const concreteMap = tex => canvasTex(1024, 1024, (x, w) => {
     x.fillStyle = tex; x.fillRect(0, 0, w, w);
     for (let i = 0; i < 26000; i++) { const g = 120 + rnd() * 70 | 0; x.fillStyle = `rgba(${g},${g - 4},${g - 10},${0.12 + rnd() * 0.2})`;
@@ -622,7 +622,7 @@ function buildPad(api) {
   mesh(new THREE.BoxGeometry(10, 0.1, 100).translate(0, 0.05, 58), std(0x1a1918, 1), false);
   const curb = std(0x8a867e, 0.9, 0, { map: repeatTex(concreteMap("#8a867e"), 2) });
   for (const s of [-1, 1]) mesh(new THREE.BoxGeometry(1, 1.5, 100).translate(5.5 * s, 0.75, 58), curb);
-  // launch mount: a concrete table with an opening over the trench, steel hold-down clamps
+  // Mount: a concrete table with an opening over the trench, steel hold-down clamps
   const mountMat = std(0xffffff, 0.9, 0, { map: repeatTex(concreteMap("#8f8a82"), 1) });
   for (const s of [-1, 1]) {
     mesh(new THREE.BoxGeometry(4.5, MOUNT, 18).translate(6.75 * s, MOUNT / 2, 0), mountMat);
@@ -632,7 +632,7 @@ function buildPad(api) {
   const clamps = [0, 1, 2, 3].map(k => {
     const m = mesh(new THREE.BoxGeometry(0.55, 1.3, 1.1).translate(0, MOUNT + 0.65, 0), steel); m.userData.a = Math.PI / 4 + k * Math.PI / 2; return m;
   });
-  // transporter-erector strongback (pivoted back a few degrees), fixed service structure with swung-away crew arm
+  // Structures: transporter-erector strongback (pivoted back a few degrees), service tower with swung-away crew arm
   const towerMat = std(0x8e9399, 0.55, 0.65);
   const te = new THREE.Group(); te.position.set(-5.3, MOUNT, 0); scene.add(te);
   const teMesh = new THREE.Mesh(mergeGeometries(lattice(64, 3.2, 3.2, 0.42, 0.22)), std(0x9ea3a8, 0.5, 0.6));
@@ -643,7 +643,7 @@ function buildPad(api) {
   const arm = new THREE.Group(); arm.position.set(-22, 66, -6); arm.rotation.y = 80 * DEG; scene.add(arm);
   arm.add(Object.assign(new THREE.Mesh(new THREE.BoxGeometry(15, 2.6, 2.4).translate(7.5, 0, 0), towerMat), { castShadow: true }),
     Object.assign(new THREE.Mesh(new THREE.BoxGeometry(3, 3.4, 3.4).translate(16, 0.2, 0), std(0xe6e6e2, 0.6)), { castShadow: true }));
-  // lightning-protection masts with catenary wires
+  // Masts: lightning protection with catenary wires
   const mastPos = [[78, 78], [-78, 78], [-78, -78], [78, -78]];
   const mastGeo = mergeGeometries([...lattice(118, 2.2, 4.4, 0.3, 0.14), new THREE.CylinderGeometry(0.12, 0.2, 14, 6).translate(0, 125, 0)]);
   for (const [x, z] of mastPos) { const m = mesh(mastGeo, towerMat, true, false); m.position.set(x, DECK, z); }
@@ -655,7 +655,7 @@ function buildPad(api) {
     wire(V3(x1, 132, z1), V3(x2, 132, z2), 18);
     wire(V3(x1, 132, z1), V3(x1 * 1.7, DECK + 1, z1 * 1.7), 6);
   }
-  // water tower, propellant farm, the assembly building on the horizon, scattered hangars
+  // Facilities: water tower, propellant farm, the assembly building on the horizon, scattered hangars
   const tankWhite = std(0xe9e8e3, 0.55, 0.1);
   const wt = new THREE.Mesh(mergeGeometries([...[[-1, -1], [-1, 1], [1, -1], [1, 1]].map(([a, b]) =>
     beam(V3(7 * a, 0, 7 * b), V3(3 * a, 74, 3 * b), 1.1)), new THREE.SphereGeometry(11, 32, 20).translate(0, 82, 0)]), tankWhite);
@@ -670,13 +670,13 @@ function buildPad(api) {
       std(rnd() < 0.5 ? 0xd7d5cf : 0xa9aaa6, 0.85), false, false);
   }
 
-  // the vehicle
+  // Vehicle
   const stack = buildStack(anis); scene.add(stack.root);
   const groundLight = new THREE.PointLight(0xff9a40, 0, 0, 2); groundLight.position.set(0, 2, 0); scene.add(groundLight);
   const baseGlow = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, transparent: true, depthWrite: false,
     blending: THREE.AdditiveBlending })); baseGlow.position.set(0, 1.5, 0); baseGlow.scale.setScalar(16); scene.add(baseGlow);
 
-  // smoke, steam and LOX vapour: a pool of lit billboards
+  // Vapour: smoke, steam and LOX as a pool of lit billboards
   const ptex = [puffTex(), puffTex(), puffTex(), puffTex()];
   const puffs = Array.from({ length: 760 }, (_, i) => {
     const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: ptex[i % 4], transparent: true, depthWrite: false, fog: true }));
@@ -691,7 +691,7 @@ function buildPad(api) {
   };
   const acc = {};
   const spawn = (key, rate, dt, fn) => { acc[key] = (acc[key] ?? 0) + rate * dt; for (; acc[key] >= 1; acc[key]--) fn(); };
-  // sound-suppression deluge: water thrown up over the mount from a ring of nozzles
+  // Deluge: sound-suppression water thrown up over the mount from a ring of nozzles
   const ND = 2600, dPos = new Float32Array(ND * 3).fill(-1e5), dVel = new Float32Array(ND * 3);
   const dGeo = new THREE.BufferGeometry(); dGeo.setAttribute("position", new THREE.BufferAttribute(dPos, 3));
   const deluge = new THREE.Points(dGeo, new THREE.PointsMaterial({ map: glowTex, size: 0.09, transparent: true, opacity: 0.7,
@@ -699,7 +699,7 @@ function buildPad(api) {
   deluge.material.color.setRGB(1.7, 1.75, 1.8); deluge.frustumCulled = false; scene.add(deluge);
   let dNext = 0;
 
-  // post: HDR render with MSAA, bloom on the flame, ACES in the output pass, then lens/grain
+  // Post: HDR render with MSAA, bloom on the flame, ACES in the output pass, then lens/grain
   const composer = new EffectComposer(R, new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: 4 }));
   composer.addPass(new RenderPass(scene, camera));
   const bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.5, 0.55, 3.5);
@@ -728,7 +728,7 @@ function buildPad(api) {
       const nozzle = V3(0, -1.08, 0).applyMatrix4(stack.root.matrixWorld);
       down.set(0, -1, 0).applyQuaternion(stack.root.quaternion);
 
-      // engines: ignition at T−2.6 with the green TEA-TEB flash, full thrust by the release at T−0
+      // Engines: ignition at T−2.6 with the green TEA-TEB flash, full thrust by the release at T−0
       const thr = T > -2.6 ? (T < 0 ? smooth((T + 2.6) / 1.2) : 1) : 0;
       const green = T > -2.6 && T < -2.15 ? 1 - smooth((T + 2.6) / 0.45) : 0;
       const vis = Math.max(thr, green * 0.5), fl = 0.92 + 0.08 * Math.sin(T * 61) * Math.sin(T * 17);
@@ -750,7 +750,7 @@ function buildPad(api) {
       te.rotation.z = (2.5 + 4 * smooth(T / 4)) * DEG;
       waterN.offset.set(T * 0.004, T * 0.0025);
 
-      // emitters
+      // Emitters
       if (T < 0.6) spawn("vent", 16 * (1 - smooth(T / 0.6)), dt, () => {
         const [y, a] = [[BASE + 57.2, -0.7], [BASE + 39.6, -0.95], [BASE + 1.4, -1.55]][Math.floor(rnd() * 3)];
         const out = V3(Math.sin(a), 0, Math.cos(a));
@@ -782,7 +782,7 @@ function buildPad(api) {
       }
       if (alt <= 12 || !trailAt || trailAt.distanceTo(tail) > 80) trailAt = tail;
 
-      // simulate
+      // Simulate
       const fireI = 3.5 * vis * fl;
       for (const p of puffs) {
         if (!p.s.visible) continue;
@@ -808,7 +808,7 @@ function buildPad(api) {
       }
       dGeo.attributes.position.needsUpdate = true;
 
-      // camera: quick cuts through the count, then the pad and tower cameras, then the long-lens tracker
+      // Camera: quick cuts through the count, then the pad and tower cameras, then the long-lens tracker
       const u = (a, b) => clamp((T - a) / (b - a), 0, 1);
       const rk = stack.root.position, mid = rk.clone().addScaledVector(down, -30);
       let c, i;
@@ -849,7 +849,7 @@ function buildPad(api) {
   };
 }
 
-// ---------------------------------------------------------------- mission control
+// Mission
 export function initMission(api) {
   const st = api.serverState;
   const S = {
@@ -860,7 +860,7 @@ export function initMission(api) {
   };
   window.__mission = S;   // handy for poking at it from the console (S.api drives the flow)
 
-  // ------------------------------------------------ DOM
+  // DOM
   const root = document.createElement("div");
   root.id = "mission";
   root.innerHTML = `
@@ -886,7 +886,7 @@ export function initMission(api) {
   const fade = document.createElement("div"); fade.id = "mFade"; document.body.appendChild(fade);
   const ret = document.createElement("div"); ret.id = "mReturn"; ret.hidden = true; document.body.appendChild(ret);
 
-  // ------------------------------------------------ scenes
+  // Scenes
   const G = buildGlobe();
   const holo = buildHolo(api, st.vehicle.lander);
   let pad = null;
@@ -934,7 +934,7 @@ export function initMission(api) {
     if (show) { el.style.left = `${(_p.x + 1) / 2 * innerWidth}px`; el.style.top = `${(1 - _p.y) / 2 * innerHeight}px`; }
   }
 
-  // ------------------------------------------------ state helpers
+  // State
   const lander = st.vehicle.lander;
   const sites = st.launch_sites;
   function setPhase(p) {
@@ -955,7 +955,7 @@ export function initMission(api) {
   }
   const launchSite = () => sites[S.launchKey];
 
-  // current rocket state: { pos (world), lat, lon, alt, speed, extra... }
+  // Rocket: current state { pos (world), lat, lon, alt, speed, extra... }
   const _w = new THREE.Vector3();
   function rocketState() {
     const T = S.T;
@@ -979,7 +979,7 @@ export function initMission(api) {
     return { pos: eciWorld(r, _w), lat, lon, alt: Math.hypot(...r) - RE, speed: Math.hypot(...v) };
   }
 
-  // ------------------------------------------------ left sidebar
+  // Sidebar
   function renderLeft() {
     const el = $("mLeft"), p = S.phase;
     const head = (title, count) => `<span class="mlive">LIVE TRACKING</span><h1>${title}</h1><div class="count">${count}</div>`;
@@ -1052,7 +1052,7 @@ export function initMission(api) {
   }
   const eventT = name => S.ascent?.events.find(e => e.name === name)?.t ?? Infinity;
 
-  // ------------------------------------------------ right panel
+  // Panel
   function renderPanel() {
     const el = $("mPanel"), p = S.phase;
     if (p === "setup") {
@@ -1123,7 +1123,7 @@ export function initMission(api) {
     if (S.landErr) note.className = "mnote bad";
   }
 
-  // ------------------------------------------------ warp + card + holo stats
+  // Readouts: warp, card, holo stats
   function renderWarp() {
     const el = $("mWarp"), p = S.phase;
     el.style.display = p === "setup" || p === "liftoff" ? "none" : "flex";
@@ -1196,13 +1196,13 @@ export function initMission(api) {
         <span>Pad offset at gate</span><b>${Math.hypot(S.landing.conditions.offset_x, S.landing.conditions.offset_z).toFixed(0)} m</b></div>` : ""}`;
   }
 
-  // ------------------------------------------------ actions
+  // Actions
   function aimAtLaunchSite() {
     const s = launchSite();
     const dir = fixedToWorld(llaLocal(s.lat + 12, s.lon), 0).normalize();
     G.camera.position.copy(dir.multiplyScalar(G.camera.position.length() || 3.2));
     launchMark.position.copy(llaLocal(s.lat, s.lon, 2e3));
-    // a morning launch: the sun stands a little east of the pad
+    // Sun: a morning launch, so it stands a little east of the pad
     G.sunDir.copy(llaLocal(s.lat * 0.4, s.lon + 35)).normalize();
   }
 
@@ -1266,7 +1266,7 @@ export function initMission(api) {
   async function commitLanding() {
     if (!S.site || !S.plan?.reachable) return;
     const site = S.site;
-    // re-plan from now, so the burn is never in the past, then start the landing on the server
+    // Re-plan from now, so the burn is never in the past, then start the landing on the server
     let plan;
     try {
       plan = await post("/api/mission/plan", { orbit: S.ascent.orbit, budget_dv: S.ascent.budget_dv, t_now: S.T, lat: site.lat, lon: site.lon });
@@ -1311,7 +1311,7 @@ export function initMission(api) {
     }, 750);
   }
 
-  // ------------------------------------------------ picking
+  // Picking
   let downAt = null;
   const ray = new THREE.Raycaster();
   api.renderer.domElement.addEventListener("pointerdown", e => { if (S.active) downAt = [e.clientX, e.clientY]; });
@@ -1326,7 +1326,7 @@ export function initMission(api) {
     selectSite(Math.asin(p.y) / DEG, Math.atan2(-p.z, p.x) / DEG);
   });
 
-  // ------------------------------------------------ enter / exit
+  // Lifecycle
   function enter() {
     S.active = true; root.hidden = false; ret.hidden = true;
     document.body.classList.add("mission-on"); document.body.classList.remove("mission-landing");
@@ -1345,7 +1345,7 @@ export function initMission(api) {
   $("mClassic").onclick = () => { exit(); ret.hidden = true; document.body.classList.remove("mission-landing"); };
   api.onOpenMission(() => { enter(); if (S.phase === "landing") setPhase(S.ascent ? "orbit" : "setup"); });
 
-  // ------------------------------------------------ frame
+  // Frame
   const camDir = new THREE.Vector3();
   let lastUi = 0, lastTrack = -1e9;
   function frame(dtReal) {
@@ -1354,7 +1354,7 @@ export function initMission(api) {
     S.time += dtReal;
     const p = S.phase, A = S.ascent;
 
-    // advance mission time
+    // Clock
     if (S.paused) {
       // hold
     } else if (p === "liftoff") {
@@ -1393,7 +1393,7 @@ export function initMission(api) {
       }
     }
 
-    // events → toasts
+    // Events: shown as toasts
     if (A) {
       const evs = [...A.events, ...(S.plan?.committed ? S.plan.events : [])].filter(e => e.name !== "liftoff");
       const passed = evs.filter(e => e.t <= S.T).length;
@@ -1404,7 +1404,7 @@ export function initMission(api) {
       S.evDone = passed;
     }
 
-    // globe
+    // Globe
     G.earth.rotation.y = OMEGA * S.T;
     G.clouds.rotation.y = S.T * 2e-6;
     G.sats.mat.uniforms.uTime.value = S.T;
@@ -1442,7 +1442,7 @@ export function initMission(api) {
     }
     siteRing.scale.setScalar(1 + 0.25 * Math.sin(S.time * 4));
 
-    // camera: follow the rocket unless the user is steering
+    // Camera: follow the rocket unless the user is steering
     if (S.follow && S.time > S.userHold && p !== "setup") {
       camDir.copy(rs.pos).normalize();
       if (p === "descent" && S.T > S.plan.t_burn) camDir.lerp(siteMark.getWorldPosition(new THREE.Vector3()).normalize(), smooth((S.T - S.plan.t_burn) / S.plan.tof * 1.6));
@@ -1479,7 +1479,7 @@ export function initMission(api) {
       else if (p === "orbit" && S.plan) renderSite();
     }
 
-    // render: main view (pad camera during the vignette, globe otherwise), then the hologram in its panel
+    // Render: main view (pad camera during the vignette, globe otherwise), then the hologram in its panel
     const w = innerWidth, h = innerHeight;
     R.setScissorTest(false); R.setViewport(0, 0, w, h);
     if (p === "liftoff" && S.T < VIGNETTE) {

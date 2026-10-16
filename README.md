@@ -36,7 +36,7 @@ hold still while they close around it. It's much harder.
 
 My personal blueprint for this project can be found in notes.md. This project is heavily inspired by spacex and its Starship, but any type of rocket model and its specs can easily be implimented into this along with varius planets and how they affect a landing.
 
-A few AI agents were used in the process such as Claude Opus 5.5 (medium effort), Gemini 4 Argon (medium thinking), and Claude Haiku 5.5 (medium effort). Each had their own tasks, but they were mainily used in the physics process, espcially when gathering specs for planets and rocket models. Gemini 4 Argon had its role primarily focused on the rocket thrusters and their phyics while Claude Opus 5.5 worked on models and planet physics. Haiku was only used for the mathematics section since im not a rocket scientist.
+A few AI agents were used in the process such as Claude Opus 5.5 (medium effort), Gemini 4 Argon (medium thinking), and Claude Haiku 5.5 (medium effort). Each had their own tasks, but they were mainily used in the physics process, espcially when gathering specs for planets and rocket models. Gemini 4 Argon had its role primarily focused on the rocket thrusters and their phyics while Claude Opus 5.5 worked on models and planet physics. Haiku was used for the mathematics section.
 
 An opensource neuro network is being used for the training, but if you'd like a from scratch network can be implimented if you take the time to make it.
 

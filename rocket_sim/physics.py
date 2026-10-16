@@ -14,7 +14,7 @@ import numpy as np
 from .config import G0, RocketSpec
 
 
-# ---------------------------------------------------------------------- quaternions
+# Quaternions
 def quat_mul(a: np.ndarray, b: np.ndarray) -> np.ndarray:
     aw, ax, ay, az = np.moveaxis(a, -1, 0)
     bw, bx, by, bz = np.moveaxis(b, -1, 0)
@@ -50,7 +50,7 @@ def tilt_angle(q: np.ndarray) -> np.ndarray:
     return np.arccos(np.clip(up_vector(q)[..., 1], -1.0, 1.0))
 
 
-# ---------------------------------------------------------------------- rocket
+# Rocket
 class RocketBatch:
     """State and dynamics for N rockets sharing one RocketSpec."""
 
@@ -65,6 +65,7 @@ class RocketBatch:
         self.throttle = np.zeros(n)
         self.gimbal = np.zeros((n, 2))     # (δx, δz)
 
+        # Contact points (body frame)
         L, R = spec.length, spec.leg_radius
         foot_y = -L / 2 - spec.leg_drop
         self.leg_points = np.array([[R, foot_y, 0], [-R, foot_y, 0], [0, foot_y, R], [0, foot_y, -R]], float)
@@ -72,7 +73,7 @@ class RocketBatch:
         self.body_points = np.array([[r, -L / 2, 0], [-r, -L / 2, 0], [0, -L / 2, r], [0, -L / 2, -r],
                                      [0, L / 2, 0]], float)
 
-    # ------------------------------------------------------------------ derived
+    # Derived
     def derived(self):
         """Mass properties from spec + current fuel. Returns a dict of (N,) / (N,3) arrays."""
         s = self.spec
@@ -98,7 +99,7 @@ class RocketBatch:
         rel = body_pts[None, :, :] - np.stack([np.zeros(self.n), com_y, np.zeros(self.n)], -1)[:, None, :]
         return self.pos[:, None, :] + quat_rotate(self.quat[:, None, :], rel)
 
-    # ------------------------------------------------------------------ dynamics
+    # Dynamics
     def step(self, dt, target_throttle, target_gimbal, roll_cmd, gravity, density, isp_scale, wind,
              active=None):
         """Advance all rockets by dt. Per-env environment arrays are shape (N,) or (N,3).
@@ -110,7 +111,7 @@ class RocketBatch:
             active = np.ones(self.n, bool)
         a = active
 
-        # Actuator rate limits.
+        # Actuators: rate limited
         dthr = np.clip(target_throttle - self.throttle, -s.throttle_rate * dt, s.throttle_rate * dt)
         self.throttle = np.where(a, np.clip(self.throttle + dthr, 0.0, 1.0), self.throttle)
         tg = np.clip(target_gimbal, -s.max_gimbal, s.max_gimbal)
@@ -120,7 +121,7 @@ class RocketBatch:
         d = self.derived()
         mass, inertia, arm = d["mass"], d["inertia"], d["lever_arm"]
 
-        # Engine: off below minimum throttle or with no fuel.
+        # Engine: off below minimum throttle or with no fuel
         on = (self.throttle >= s.min_throttle) & (self.fuel > 0) & a
         thrust = np.where(on, self.throttle * s.t_max, 0.0)
         mdot = thrust / (s.isp * isp_scale * G0)
@@ -128,7 +129,7 @@ class RocketBatch:
         thrust = np.where(mdot > 0, thrust * burn / np.maximum(mdot * dt, 1e-12), 0.0)
         self.fuel = self.fuel - burn
 
-        # Thrust direction in body frame: R_x(δx) R_z(δz) · (0, 1, 0).
+        # Thrust: body-frame direction R_x(δx) R_z(δz) · (0, 1, 0)
         gx, gz = self.gimbal[:, 0], self.gimbal[:, 1]
         dir_b = np.stack([-np.sin(gz), np.cos(gz) * np.cos(gx), np.cos(gz) * np.sin(gx)], -1)
         f_body = thrust[:, None] * dir_b
@@ -136,7 +137,7 @@ class RocketBatch:
         torque = np.cross(engine_pos, f_body)
         torque[:, 1] += np.clip(roll_cmd, -1, 1) * s.rcs_roll_torque * a
 
-        # Aerodynamic drag (area blends between end-on and broadside).
+        # Drag: area blends between end-on and broadside
         v_rel = self.vel - wind
         speed = np.linalg.norm(v_rel, axis=-1)
         up = up_vector(self.quat)
@@ -144,18 +145,18 @@ class RocketBatch:
         side_area = 2 * s.radius * s.length
         area = s.ref_area * cos_a + side_area * np.sqrt(np.maximum(1 - cos_a ** 2, 0))
         f_drag = -0.5 * density[:, None] * s.cd * area[:, None] * speed[:, None] * v_rel
-        # Aerodynamic rotational damping, proportional to dynamic pressure.
+        # Damping: aerodynamic, proportional to dynamic pressure
         torque -= (0.5 * density * speed * s.cd * side_area * s.length ** 2 / 12)[:, None] * self.omega * 0.1
 
         f_world = quat_rotate(self.quat, f_body) + f_drag
         acc = f_world / mass[:, None]
         acc[:, 1] -= gravity
 
-        # Semi-implicit Euler.
+        # Translation: semi-implicit Euler
         self.vel = np.where(a[:, None], self.vel + acc * dt, self.vel)
         self.pos = np.where(a[:, None], self.pos + self.vel * dt, self.pos)
 
-        # Euler's rotation equations, body frame, diagonal inertia.
+        # Rotation: Euler's equations, body frame, diagonal inertia
         w = self.omega
         w_dot = (torque - np.cross(w, inertia * w)) / inertia
         self.omega = np.where(a[:, None], w + w_dot * dt, w)

@@ -60,7 +60,7 @@ class Session:
         self.status = {"phase": "idle", "done": 0, "total": 0}
         self._build(load=not fresh)
 
-    # ------------------------------------------------------------------ model
+    # Model
     def _build(self, load: bool):
         from stable_baselines3 import PPO
         from stable_baselines3.common.vec_env import VecNormalize
@@ -108,7 +108,7 @@ class Session:
         self.status.update(phase="training", done=0, total=steps)
         self.model.learn(total_timesteps=steps, reset_num_timesteps=False, callback=Progress())
 
-    # ------------------------------------------------------------------ launch
+    # Launch
     def launch(self, req: dict) -> dict:
         body = req.get("body", "earth")
         if body not in BODIES:
@@ -119,7 +119,7 @@ class Session:
         site = req.get("site")          # from orbit.site_conditions, for a landing picked on the globe
         with self.lock:
             t0 = time.time()
-            # Train on the body (and landing site) being launched, so the policy practices what you ask it to do.
+            # Train: on the body (and landing site) being launched, so the policy practices what you ask it to do
             self.raw.sim.cfg.sim.bodies = (body,)
             self.cfg.sim.bodies = (body,)
             orb.apply_site(self.raw.sim.cfg, site)
@@ -128,6 +128,7 @@ class Session:
                 self.train(train_steps)
             self.status.update(phase="flying", done=0, total=0)
 
+            # Fly
             cfg = EnvConfig(task=self.task)
             cfg.sim.bodies = (body,)
             orb.apply_site(cfg, site)
@@ -142,6 +143,7 @@ class Session:
                     else int(np.random.default_rng().integers(1 << 30)))
             replay = record(cfg, policy, num_rockets=1, seed=seed, setup=launch_setup(cond))
 
+            # Save
             self.launches += 1
             steps = int(self.model.num_timesteps)
             rk = replay["rockets"][0]
@@ -162,7 +164,7 @@ class Session:
                 replay["meta"]["site"] = site
             return replay
 
-    # ------------------------------------------------------------------ orbital mission
+    # Mission
     def mission_land(self, req: dict) -> dict:
         """Deorbit to the site picked on the globe, then train and fly the landing under its conditions."""
         lat, lon = float(req["lat"]), float(req["lon"])
@@ -194,6 +196,7 @@ class Session:
         }
 
 
+# Routes
 def mission_ascent(req: dict) -> dict:
     """Lift-off: fly the launcher from a launch site into the requested orbit."""
     key = req.get("site", "cape")
@@ -213,6 +216,7 @@ def mission_plan(req: dict) -> dict:
     return plan
 
 
+# Server
 class Sessions:
     """One Session per task, built the first time that task is used."""
 
